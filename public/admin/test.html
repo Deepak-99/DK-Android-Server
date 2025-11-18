@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .test-container {
+            border: 1px solid #ddd;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-top: 2rem;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Admin Panel Test</h1>
+    <p>This page tests if the basic JavaScript functionality is working.</p>
+    
+    <div class="test-container">
+        <h2>Basic JavaScript Test</h2>
+        <div id="basic-test">
+            <p>Testing JavaScript execution...</p>
+            <div id="test-result">
+                <p>JavaScript is <span id="js-status">not working</span></p>
+                <p>Console logging is <span id="console-status">not working</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>Module Import Test</h2>
+        <div id="module-test">
+            <p>Testing module imports...</p>
+            <div id="module-result">Not tested yet</div>
+            <button id="test-module-btn" class="btn">Test Module Import</button>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>API Test</h2>
+        <div id="api-test">
+            <p>Testing API connectivity...</p>
+            <div id="api-result">Not tested yet</div>
+            <button id="test-api-btn" class="btn">Test API</button>
+        </div>
+    </div>
+
+    <script>
+        // Basic JavaScript test
+        document.addEventListener('DOMContentLoaded', () => {
+            // Test basic JavaScript
+            document.getElementById('js-status').textContent = 'working';
+            document.getElementById('js-status').className = 'success';
+            
+            // Test console
+            try {
+                console.log('Test log message');
+                document.getElementById('console-status').textContent = 'working';
+                document.getElementById('console-status').className = 'success';
+            } catch (e) {
+                document.getElementById('console-status').textContent = 'error: ' + e.message;
+                document.getElementById('console-status').className = 'error';
+            }
+
+            // Test module import
+            document.getElementById('test-module-btn').addEventListener('click', async () => {
+                const resultEl = document.getElementById('module-result');
+                resultEl.textContent = 'Testing...';
+                
+                try {
+                    // Try to import a module
+                    const module = await import('./js/modules/ui/UIManager.js');
+                    resultEl.innerHTML = '✅ Module import successful!';
+                    resultEl.className = 'success';
+                    console.log('UIManager module:', module);
+                } catch (e) {
+                    resultEl.innerHTML = `❌ Module import failed: ${e.message}`;
+                    resultEl.className = 'error';
+                    console.error('Module import error:', e);
+                }
+            });
+
+            // Test API
+            document.getElementById('test-api-btn').addEventListener('click', async () => {
+                const resultEl = document.getElementById('api-result');
+                resultEl.textContent = 'Testing API...';
+                
+                try {
+                    const response = await fetch('/api/health');
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        resultEl.innerHTML = `✅ API is working! Status: ${data.status || 'OK'}`;
+                        resultEl.className = 'success';
+                    } else {
+                        resultEl.innerHTML = `❌ API error: ${data.message || 'Unknown error'}`;
+                        resultEl.className = 'error';
+                    }
+                } catch (e) {
+                    resultEl.innerHTML = `❌ API request failed: ${e.message}`;
+                    resultEl.className = 'error';
+                    console.error('API test error:', e);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

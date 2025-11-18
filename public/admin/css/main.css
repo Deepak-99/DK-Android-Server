@@ -1,0 +1,73 @@
+/* High contrast mode */
+.high-contrast {
+    --bs-body-color: #000;
+    --bs-body-bg: #fff;
+    --bs-primary: #0000ff;
+    --bs-secondary: #666;
+    --bs-success: #006400;
+    --bs-danger: #8b0000;
+    --bs-warning: #8b4513;
+    --bs-info: #00008b;
+    --bs-light: #f8f9fa;
+    --bs-dark: #212529;
+}
+
+/* Focus styles */
+:focus {
+    outline: 3px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+/* Skip link */
+.skip-to-content {
+    position: absolute;
+    left: -9999px;
+    z-index: 9999;
+    padding: 1em;
+    background-color: var(--bs-light);
+    color: var(--bs-dark);
+    text-decoration: none;
+}
+
+.skip-to-content:focus {
+    left: 0;
+}
+
+/* Screen reader only */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+        color: black !important;
+    }
+
+    a[href]::after {
+        content: " (" attr(href) ")";
+    }
+}

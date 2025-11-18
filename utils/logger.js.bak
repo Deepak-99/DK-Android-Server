@@ -1,0 +1,395 @@
+const winston = require('winston');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+// Create logs directory structure
+const logDir = 'logs';
+const dailyDir = path.join(logDir, 'daily');
+const errorDir = path.join(logDir, 'errors');
+
+// Ensure all log directories exist
+[logDir, dailyDir, errorDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// Helper function to get current date for log filenames
+const getCurrentDate = () => new Date().toISOString().split('T')[0];
+
+// Create the logger instance
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp({
+      format: 'YYYY-MM-DD HH:mm:ss.SSS'
+    }),
+    winston.format.errors({ stack: true }),
+    winston.format.json(),
+    winston.printf(({ timestamp, level, message, ...meta }) => {
+      return JSON.stringify({
+        timestamp,
+        level,
+        message,
+        pid: process.pid,
+        hostname: os.hostname(),
+        ...meta
+      }, null, 0);
+    })
+  ),
+  transports: [
+    // Console transport for development
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    }),
+    // File transport for errors
+    new winston.transports.File({
+      filename: path.join(errorDir, 'error.log'),
+      level: 'error',
+      maxsize: 10485760, // 10MB
+      maxFiles: 10
+    }),
+    // Combined log file
+    new winston.transports.File({
+      filename: path.join(dailyDir, `${getCurrentDate()}.log`),
+      maxsize: 10485760, // 10MB
+      maxFiles: 30
+    })
+  ],
+  exceptionHandlers: [
+    new winston.transports.File({
+      filename: path.join(errorDir, 'exceptions.log')
+    })
+  ],
+  exitOnError: false
+});
+
+// Add helper methods
+Object.assign(logger, {
+  // Log HTTP requests
+  logRequest: function(req, res, responseTime) {
+    this.info('Request processed', {
+      type: 'request',
+      method: req.method,
+      url: req.originalUrl,
+      statusCode: res.statusCode,
+      responseTime: `${responseTime}ms`,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+  },
+  
+  // Log errors with context
+  logError: function(error, context = {}) {
+    this.error(error.message, {
+      type: 'error',
+      stack: error.stack,
+      name: error.name,
+      ...context
+    });
+  },
+  
+  // Log device activity
+  logDeviceActivity: function(deviceId, activity, metadata = {}) {
+    this.info('Device Activity', {
+      type: 'device_activity',
+      deviceId,
+      activity,
+      ...metadata
+    });
+  },
+  
+  // Log database operations
+  logDatabase: function(operation, table, recordId, success, queryTime, error = null) {
+    const level = success ? 'info' : 'error';
+    this.log(level, 'Database Operation', {
+      type: 'database',
+      operation,
+      table,
+      recordId,
+      success,
+      queryTime,
+      error: error ? error.message : null
+    });
+  },
+  
+  // Log system metrics
+  logSystemMetrics: function() {
+    this.debug('System Metrics', {
+      type: 'system_metrics',
+      memory: process.memoryUsage(),
+      uptime: process.uptime(),
+      platform: os.platform(),
+      arch: os.arch()
+    });
+  }
+});
+
+// Log startup
+logger.info('Logger initialized', { 
+  type: 'system_startup',
+  nodeVersion: process.version,
+  platform: os.platform(),
+  arch: os.arch()
+});
+
+// Log system metrics every 5 minutes
+setInterval(() => {
+  logger.logSystemMetrics();
+}, 5 * 60 * 1000);
+
+module.exports = logger;
+  ]
+});
+
+// Enhanced logging methods
+const enhancedLogger = Object.assign({}, logger, {
+  
+  // Request logging with detailed context
+  logRequest: (req, res, responseTime) => {
+    const logData = {
+      type: 'request',
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      query: req.query,
+      params: req.params,
+      headers: {
+        'user-agent': req.get('User-Agent'),
+        'content-type': req.get('Content-Type'),
+        'authorization': req.get('Authorization') ? '[REDACTED]' : undefined,
+        'x-forwarded-for': req.get('X-Forwarded-For'),
+        'x-real-ip': req.get('X-Real-IP')
+      },
+      ip: req.ip || req.connection.remoteAddress,
+      statusCode: res.statusCode,
+      responseTime: responseTime,
+      contentLength: res.get('Content-Length'),
+      deviceId: req.body?.deviceId || req.query?.deviceId || 'unknown',
+      userId: req.user?.id || 'anonymous'
+    };
+    
+    logger.info('HTTP Request', logData);
+    performanceLogger.info('Request Performance', {
+      ...logData,
+      timestamp: new Date().toISOString()
+    });
+  },
+
+  // API endpoint analytics
+  logApiCall: (endpoint, method, deviceId, success, responseTime, errorCode = null) => {
+    const analyticsData = {
+      type: 'api_call',
+      endpoint,
+      method,
+      deviceId,
+      success,
+      responseTime,
+      errorCode,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    analyticsLogger.info('API Call Analytics', analyticsData);
+  },
+
+  
+  // Device activity logging
+  logDeviceActivity: (deviceId, activity, metadata = {}) => {
+    const activityData = {
+      type: 'device_activity',
+      deviceId,
+      activity,
+      metadata,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    logger.info('Device Activity', activityData);
+    analyticsLogger.info('Device Activity Analytics', activityData);
+  },
+  
+  // Command execution logging
+  logCommand: (deviceId, commandType, commandData, success, executionTime, error = null) => {
+    const commandLog = {
+      type: 'command_execution',
+      deviceId,
+      commandType,
+      commandData: typeof commandData === 'object' ? JSON.stringify(commandData) : commandData,
+      success,
+      executionTime,
+      error: error ? error.message : null,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    if (success) {
+      logger.info('Command Executed', commandLog);
+    } else {
+      logger.error('Command Failed', commandLog);
+    }
+    
+    analyticsLogger.info('Command Analytics', commandLog);
+  },
+  
+  // File operation logging
+  logFileOperation: (deviceId, operation, filename, fileSize, success, error = null) => {
+    const fileLog = {
+      type: 'file_operation',
+      deviceId,
+      operation, // upload, download, delete, etc.
+      filename,
+      fileSize,
+      success,
+      error: error ? error.message : null,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    if (success) {
+      logger.info('File Operation', fileLog);
+    } else {
+      logger.error('File Operation Failed', fileLog);
+    }
+    
+    analyticsLogger.info('File Operation Analytics', fileLog);
+  },
+  
+  // Authentication logging
+  logAuth: (type, deviceId, success, ip, userAgent, error = null) => {
+    const authLog = {
+      type: 'authentication',
+      authType: type, // login, token_refresh, logout, etc.
+      deviceId,
+      success,
+      ip,
+      userAgent,
+      error: error ? error.message : null,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    if (success) {
+      logger.info('Authentication Success', authLog);
+    } else {
+      logger.warn('Authentication Failed', authLog);
+    }
+    
+    analyticsLogger.info('Authentication Analytics', authLog);
+  },
+  
+  // Database operation logging
+  logDatabase: (operation, table, recordId, success, queryTime, error = null) => {
+    const dbLog = {
+      type: 'database_operation',
+      operation, // create, read, update, delete
+      table,
+      recordId,
+      success,
+      queryTime,
+      error: error ? error.message : null,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    if (success) {
+      logger.debug('Database Operation', dbLog);
+    } else {
+      logger.error('Database Operation Failed', dbLog);
+    }
+  },
+  
+  // System metrics logging
+  logSystemMetrics: () => {
+    const metrics = {
+      type: 'system_metrics',
+      memory: process.memoryUsage(),
+      uptime: process.uptime(),
+      cpu: process.cpuUsage(),
+      platform: os.platform(),
+      arch: os.arch(),
+      nodeVersion: process.version,
+      pid: process.pid,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    logger.debug('System Metrics', metrics);
+    performanceLogger.info('System Performance', metrics);
+  },
+  
+  // Socket.IO connection logging
+  logSocket: (event, socketId, deviceId, data = {}) => {
+    const socketLog = {
+      type: 'socket_event',
+      event,
+      socketId,
+      deviceId,
+      data: typeof data === 'object' ? JSON.stringify(data) : data,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    logger.info('Socket Event', socketLog);
+    analyticsLogger.info('Socket Analytics', socketLog);
+  },
+  
+  // Error logging with context
+  logError: (error, context = {}) => {
+    const errorLog = {
+      type: 'application_error',
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      context,
+      timestamp: new Date().toISOString(),
+      date: getCurrentDate()
+    };
+    
+    logger.error('Application Error', errorLog);
+  },
+  
+  // Get log statistics
+  getLogStats: () => {
+    const stats = {
+      logDirectory: logDir,
+      directories: {
+        analytics: analyticsDir,
+        daily: dailyDir,
+        errors: errorDir,
+        performance: performanceDir
+      },
+      currentDate: getCurrentDate(),
+      uptime: process.uptime(),
+      memoryUsage: process.memoryUsage()
+    };
+    
+    return stats;
+  }
+});
+
+
+// Log system startup after initialization
+setImmediate(() => {
+  logger.info('Server Logger Initialized', {
+    type: 'system_startup',
+    logDirectory: logDir,
+    nodeVersion: process.version,
+    platform: os.platform(),
+    arch: os.arch(),
+    pid: process.pid
+  });
+});
+
+// Log system metrics every 5 minutes
+setInterval(() => {
+  if (logger.logSystemMetrics) {
+    logger.logSystemMetrics();
+  }
+}, 5 * 60 * 1000);
+
+module.exports = logger;
