@@ -1,6 +1,6 @@
 // public/admin/js/modules/services/ApiService.js
 import { handleError } from '../utils/errorHandler.js';
-import { AuthService } from './AuthService.js';
+import AuthService from './AuthService.js';
 
 export class ApiService {
     constructor() {

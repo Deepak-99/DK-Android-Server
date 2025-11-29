@@ -5,7 +5,7 @@
 
 // Import AdminPanel module
 import { AdminPanel } from './modules/core/AdminPanel.js';
-import { AuthService } from './modules/services/AuthService.js';
+import AuthService from './modules/services/AuthService.js';
 
 // Prevent admin panel from loading when not logged in
 const token = AuthService.getToken();

@@ -309,6 +309,15 @@ module.exports = (sequelize) => {
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
+
+    // 🔥 LOCATION TRACKING association (ADDED)
+    Device.hasMany(models.Location, {
+      foreignKey: 'deviceId',   // matches models/Location.deviceId
+      sourceKey: 'deviceId',
+      as: 'locations',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
   };
 
   return Device;

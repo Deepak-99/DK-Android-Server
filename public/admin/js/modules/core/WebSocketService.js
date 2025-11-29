@@ -1,98 +1,143 @@
-// public/admin/js/modules/core/WebSocketService.js
-import { io } from "https://cdn.socket.io/4.7.5/socket.io.esm.min.js";
+import io from "https://cdn.socket.io/4.7.4/socket.io.esm.min.js";
 
 export class WebSocketService {
-    constructor(onMessage = null) {
+    constructor({ onEvent = null, onConnect = null, onDisconnect = null } = {}) {
         this.socket = null;
-        this.onMessage = typeof onMessage === "function" ? onMessage : null;
-        this.isConnected = false;
+        this.onEvent = onEvent;
+        this.onConnect = onConnect;
+        this.onDisconnect = onDisconnect;
 
+        this.connected = false;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 10;
-        this.reconnectDelay = 1000;
-
+        this.maxReconnectAttempts = 20;
+        this.reconnectDelay = 1000; // exponential backoff start
         this.eventListeners = {};
+        this.queue = [];
     }
 
+    /** Connect using Socket.IO */
     connect() {
-        const token = localStorage.getItem("hawkshaw_token");
+        try {
+            this.socket = io("/", {
+                transports: ["websocket"],        // direct WebSocket only
+                path: "/socket.io",               // default Socket.IO path
+                reconnection: true,
+                reconnectionAttempts: this.maxReconnectAttempts,
+                reconnectionDelay: this.reconnectDelay
+            });
 
-        this.socket = io("/", {
-            path: "/socket.io",
-            transports: ["websocket"],
-            auth: { token }
-        });
+            /** On successful connect */
+            this.socket.on("connect", () => {
+                console.log("%c[WS] Connected (Socket.IO)", "color:green");
 
-        /** ───── Connection Events ───── */
-        this.socket.on("connect", () => {
-            console.log("🔌 Admin WebSocket connected", this.socket.id);
-            this.isConnected = true;
-            this.reconnectAttempts = 0;
-            this.emitLocal("connect");
+                this.connected = true;
+                this.reconnectAttempts = 0;
 
-            // Join admin room
-            this.socket.emit("admin-connect");
-        });
+                // Identify admin panel to backend
+                this.socket.emit("admin-connect");
 
-        this.socket.on("disconnect", (reason) => {
-            console.warn("⚠️ WebSocket disconnected:", reason);
-            this.isConnected = false;
-            this.emitLocal("disconnect");
-        });
+                if (this.onConnect) this.onConnect();
 
-        this.socket.on("connect_error", (err) => {
-            console.error("❌ WS connect error:", err.message);
+                // Flush pending messages
+                while (this.queue.length > 0) {
+                    this.socket.emit("admin-event", this.queue.shift());
+                }
+            });
 
-            this.reconnectAttempts++;
-            if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                setTimeout(() => this.connect(), this.reconnectDelay);
-                this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
+            /** On disconnect */
+            this.socket.on("disconnect", (reason) => {
+                console.warn("[WS] Disconnected:", reason);
+                this.connected = false;
+
+                if (this.onDisconnect) this.onDisconnect();
+            });
+
+            /** Socket.IO connection errors */
+            this.socket.on("connect_error", (err) => {
+                console.error("[WS] Connection error:", err);
+            });
+
+            /** Server → Admin messages */
+            this.socket.on("server-event", (data) => {
+                this._handleMessage({ data: JSON.stringify(data) });
+            });
+
+        } catch (err) {
+            console.error("[WS] Fatal connect error:", err);
+        }
+    }
+
+    /** Attempt reconnect with exponential backoff */
+    _tryReconnect() {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error("[WS] Max reconnection attempts reached.");
+            return;
+        }
+
+        this.reconnectAttempts++;
+        const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 10);
+
+        console.log(`[WS] Reconnecting in ${delay}ms...`);
+        setTimeout(() => this.connect(), delay);
+    }
+
+    /** Send message through Socket.IO (or queue if offline) */
+    send(payload) {
+        if (!payload) return;
+
+        try {
+            if (this.connected) {
+                this.socket.emit("admin-event", payload);
+            } else {
+                this.queue.push(payload);
             }
-        });
-
-        /** ───── Backend Events ───── */
-        this.socket.on("device-registered", (data) => {
-            console.log("📱 Device Registered:", data);
-            this.emitLocal("device-registered", data);
-        });
-
-        this.socket.on("device-status", (data) => {
-            console.log("📶 Device status update:", data);
-            this.emitLocal("device-status", data);
-        });
-
-        this.socket.on("command-response", (data) => {
-            console.log("📥 Command response:", data);
-            this.emitLocal("command-response", data);
-        });
-
-        this.socket.on("device-heartbeat", (data) => {
-            console.log("💓 Heartbeat:", data);
-            this.emitLocal("device-heartbeat", data);
-        });
+        } catch (err) {
+            console.error("[WS] Send error:", err);
+        }
     }
 
-    /** Send custom events */
-    send(event, payload) {
-        if (!this.socket || !this.isConnected) return;
-        this.socket.emit(event, payload);
-    }
-
-    /** Add frontend event listeners */
+    /** Register event listener */
     on(event, callback) {
-        if (!this.eventListeners[event]) this.eventListeners[event] = [];
+        if (!this.eventListeners[event]) {
+            this.eventListeners[event] = [];
+        }
         this.eventListeners[event].push(callback);
     }
 
-    emitLocal(event, payload) {
-        if (!this.eventListeners[event]) return;
-        this.eventListeners[event].forEach(cb => cb(payload));
+    /** Emit event locally */
+    _emit(event, data) {
+        if (this.eventListeners[event]) {
+            for (const cb of this.eventListeners[event]) cb(data);
+        }
+
+        if (this.onEvent) {
+            this.onEvent(event, data);
+        }
+    }
+
+    /** Handle incoming messages */
+    _handleMessage(event) {
+        try {
+            const msg = JSON.parse(event.data);
+
+            // Expected format:
+            //   { type: "device_update", payload: {...} }
+            if (!msg.type) {
+                console.warn("[WS] Unknown message:", msg);
+                return;
+            }
+
+            this._emit(msg.type, msg.payload);
+
+        } catch (err) {
+            console.error("[WS] Bad message:", event.data, err);
+        }
     }
 
     disconnect() {
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-        }
+        try {
+            this.connected = false;
+            if (this.socket) this.socket.disconnect();
+        } catch (_) {}
     }
 }

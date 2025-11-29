@@ -13,9 +13,7 @@ module.exports = (sequelize) => {
       field: 'deviceId',
       references: {
         model: 'devices',
-        key: 'deviceId',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
+        key: 'deviceId'
       },
       comment: 'Reference to devices table (deviceId)'
     },
@@ -89,11 +87,11 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.NOW
     }
   }, {
-    tableName: 'device_locations',
-    timestamps: true,
-    underscored: false,
-    indexes: [
-      {
+      tableName: 'device_locations',
+      timestamps: true,
+      paranoid: false,
+      underscored: false,
+      indexes: [      {
         name: 'idx_location_device_id',
         fields: ['deviceId']
       },
@@ -134,43 +132,79 @@ module.exports = (sequelize) => {
     });
   };
 
-  // Add syncWithDatabase method for special handling
+  /**
+   * Robust sync helper that fixes FK if the underlying column differs (deviceId vs device_id).
+   * It:
+   *  - creates table if not exists
+   *  - runs alter sync otherwise
+   *  - ensures a FK constraint exists on the correct column name
+   */
   Location.syncWithDatabase = async function(options = {}) {
     const queryInterface = this.sequelize.getQueryInterface();
     const transaction = await this.sequelize.transaction();
-    
     try {
-      // Check if the table exists
+      // Ensure table exists / sync with alter if needed
       const [tables] = await queryInterface.sequelize.query(
         "SHOW TABLES LIKE 'device_locations'"
       );
-      
-      if (tables.length === 0) {
-        // Table doesn't exist, create it with sync
+      if (!tables || tables.length === 0) {
         await this.sync({ ...options, transaction });
       } else {
         // Table exists, handle existing columns
         await this.sync({ ...options, alter: true, transaction });
       }
-      
-      // Drop existing foreign key constraints if they exist
-      await queryInterface.removeConstraint('device_locations', 'device_locations_ibfk_1', { transaction }).catch(() => {});
-      await queryInterface.removeConstraint('device_locations', 'device_locations_device_id_fk', { transaction }).catch(() => {});
-      
-      // Add the correct foreign key constraint
+
+      // Inspect columns to find the FK column name: prefer 'deviceId', fallback to 'device_id'
+      const [columns] = await queryInterface.sequelize.query("SHOW COLUMNS FROM `device_locations`", { transaction });
+      const columnNames = (columns || []).map(c => c.Field);
+
+      // determine actual fk column name
+      let fkColumn = null;
+      if (columnNames.includes('deviceId')) fkColumn = 'deviceId';
+      else if (columnNames.includes('device_id')) fkColumn = 'device_id';
+      else {
+        // If neither exists, create the expected camelCase column
+        await queryInterface.addColumn('device_locations', 'deviceId', {
+          type: DataTypes.STRING,
+          allowNull: false
+        }, { transaction });
+        fkColumn = 'deviceId';
+      }
+
+      // Remove likely existing constraints (be generous in names) - ignore errors
+      const possibleConstraintNames = [
+        'device_locations_device_id_fk',
+        'device_locations_ibfk_1',
+        'device_locations_deviceId_fk',
+        'fk_device_locations_device'
+      ];
+      for (const name of possibleConstraintNames) {
+        // removeConstraint can throw if not exists, swallow errors
+        await queryInterface.removeConstraint('device_locations', name, { transaction }).catch(() => {});
+      }
+
+      // Add the correct foreign key constraint referencing the devices table.
+      // Determine target field name on devices table: check devices table columns similarly.
+      const [deviceColumns] = await queryInterface.sequelize.query("SHOW COLUMNS FROM `devices`", { transaction });
+      const deviceColumnNames = (deviceColumns || []).map(c => c.Field);
+      // Prefer deviceId on devices, else device_id
+      const targetField = deviceColumnNames.includes('deviceId') ? 'deviceId' : (deviceColumnNames.includes('device_id') ? 'device_id' : 'deviceId');
+
+      // finally add FK constraint
+      const fkName = `device_locations_${fkColumn}_fk`;
       await queryInterface.addConstraint('device_locations', {
-        fields: ['device_id'],
+        fields: [fkColumn],
         type: 'foreign key',
-        name: 'device_locations_device_id_fk',
-        references: { 
-          table: 'devices', 
-          field: 'device_id'
+        name: fkName,
+        references: {
+          table: 'devices',
+          field: targetField
         },
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',
         transaction
       });
-      
+
       await transaction.commit();
       return true;
     } catch (error) {
