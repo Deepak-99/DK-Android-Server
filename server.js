@@ -206,6 +206,9 @@ const dashboardRouter = require('./routes/dashboard');
 app.use('/api/auth', authRouter);
 app.use('/api/devices', devicesRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use("/api", require("./routes/stream"));
+app.use("/api/devices/:deviceId/fs", require("./routes/devicefs"));
+
 
 // ---------- basic routes ----------
 app.get('/', (req, res) => {

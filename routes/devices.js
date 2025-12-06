@@ -1,5 +1,5 @@
 const express = require('express');
-const fetch = require('node-fetch'); // if on node 18+ replace with global fetch
+const fetch = require('node-fetch');
 const { Op } = require('sequelize');
 const { Device, Location, MediaFile, Contact, SMS, CallLog, DeviceInfo, Command } = require('../config/database');
 const { authenticateToken, authenticateDevice, requireAdmin } = require('../middleware/auth');
@@ -7,12 +7,11 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// Log all device requests
 const logRequest = (req, res, next) => {
   const requestId = req.requestId || 'unknown';
   logger.info(`[${requestId}] Devices API: ${req.method} ${req.originalUrl}`);
   if (Object.keys(req.body || {}).length > 0) {
-    logger.debug(`[${requestId}] Body:`, JSON.stringify(req.body, null, 2));
+    logger.debug(`[${requestId}] Request body:`, JSON.stringify(req.body, null, 2));
   }
   next();
 };
@@ -23,70 +22,54 @@ router.use([
   logRequest
 ]);
 
-const debug = (...args) => console.log('[DEVICES]', ...args);
-debug('Devices route loaded');
-
-/* -----------------------------------------------------
- * NORMALIZE DEVICE OUTPUT
- * --------------------------------------------------- */
 function normalizeDevice(plain) {
-  if (!plain) return {};
-
+  const devicePlain = plain || {};
   return {
-    ...plain,
-
-    deviceId: plain.deviceId,
-
-    // 🔥 isOnline always wins — correct online status
-    status: plain.isOnline ? 'online' : (plain.status || 'offline'),
-
-    lastSeen: plain.lastSeen || plain.last_seen || null,
+    id: devicePlain.id,
+    deviceId: devicePlain.deviceId || devicePlain.device_id || null,
+    name: devicePlain.name || devicePlain.device_name || null,
+    nickname: devicePlain.nickname || null,
+    status: devicePlain.status || (devicePlain.isOnline ? 'online' : 'offline'),
+    lastSeen: devicePlain.lastSeen || devicePlain.last_seen || null,
+    device_id: devicePlain.device_id || devicePlain.deviceId || null,
+    device_name: devicePlain.device_name || devicePlain.name || null,
+    last_seen: devicePlain.last_seen || devicePlain.lastSeen || null,
+    ...devicePlain
   };
 }
 
-/* -----------------------------------------------------
- * REVERSE GEOCODE (OSM + Google fallback)
- * --------------------------------------------------- */
+// reverseGeocode function unchanged (copy from your file)
 async function reverseGeocode(lat, lng) {
   try {
     const provider = (process.env.GEOCODE_PROVIDER || 'nominatim').toLowerCase();
-
     if (provider === 'google' && process.env.GEOCODE_API_KEY) {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.GEOCODE_API_KEY}`;
+      const key = process.env.GEOCODE_API_KEY;
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
       const resp = await fetch(url);
       const data = await resp.json();
-
-      if (data.status === 'OK' && data.results?.length > 0) {
+      if (data.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {
         return data.results[0].formatted_address;
       }
       return null;
+    } else {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=0`;
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': process.env.REVERSE_GEOCODE_AGENT || 'HawkshawServer/1.0 (your-email@example.com)' },
+        timeout: 8000
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data.display_name || null;
     }
-
-    // Default: OpenStreetMap Nominatim
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-    const resp = await fetch(url, {
-      headers: {
-        'User-Agent': process.env.REVERSE_GEOCODE_AGENT || 'HawkshawServer/1.0'
-      },
-      timeout: 8000
-    });
-
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    return data.display_name || null;
-
   } catch (err) {
-    logger.warn('Reverse geocode failed:', err.message);
+    logger.warn('Reverse geocode failed:', err && err.message ? err.message : err);
     return null;
   }
 }
 
-/* -----------------------------------------------------
- * ADMIN — GET /api/devices
- * --------------------------------------------------- */
+// GET /api/devices (Admin)
 router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   const requestId = req.requestId || 'unknown';
-
   try {
     logger.info(`[${requestId}] Fetching devices list`);
     const { page = 1, limit = 20, status, search } = req.query;
@@ -96,7 +79,6 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
 
     const whereClause = {};
     if (status) whereClause.status = status;
-
     if (search) {
       whereClause[Op.or] = [
         { device_name: { [Op.like]: `%${search}%` } },
@@ -106,95 +88,96 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
       ];
     }
 
+    try {
+      await Device.sequelize.authenticate();
+    } catch (dbErr) {
+      logger.error(`[${requestId}] DB connect error`, dbErr);
+      return res.status(500).json({ success: false, error: 'Database connection error' });
+    }
+
     const result = await Device.findAndCountAll({
       where: whereClause,
-      limit: Number(limit),
-      offset,
+      limit: parseInt(limit, 10),
+      offset: parseInt(offset, 10),
       order: [['lastSeen', 'DESC']],
-      include: [{ model: DeviceInfo, as: 'deviceInfo' }]
+      include: [{ model: DeviceInfo, as: 'deviceInfo', required: false }]
     });
 
+    const count = result.count || 0;
+    const devices = (result.rows || []).map(d => normalizeDevice(d.get ? d.get({ plain: true }) : d));
     res.json({
       success: true,
-      data: result.rows.map(d => normalizeDevice(d.get({ plain: true }))),
+      data: devices,
       pagination: {
-        current_page: Number(page),
-        total_items: result.count,
-        total_pages: Math.ceil(result.count / limit)
+        current_page: parseInt(page, 10),
+        total_pages: Math.ceil(count / limit),
+        total_items: count
       }
     });
-
   } catch (error) {
     logger.error(`[${requestId}] Error fetching devices:`, error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
   }
 });
 
-/* -----------------------------------------------------
- * ADMIN — GET /api/devices/:deviceId
- * --------------------------------------------------- */
+// GET /api/devices/:deviceId (Admin)
 router.get('/:deviceId', authenticateToken, requireAdmin, async (req, res) => {
   const requestId = req.requestId || 'unknown';
-
   try {
-    const device = await Device.findByPk(req.params.deviceId, {
+    // Try find by PK first, then fallback to deviceId property
+    let device = await Device.findByPk(req.params.deviceId, {
       include: [
-        { model: DeviceInfo, as: 'deviceInfo' },
-        { model: Location, as: 'locations', limit: 10, order: [['timestamp', 'DESC']] },
-        { model: Command, as: 'commands', limit: 20, order: [['created_at', 'DESC']] }
+        { model: DeviceInfo, as: 'deviceInfo', required: false },
+        { model: Location, as: 'locations', limit: 10, order: [['timestamp', 'DESC']], required: false },
+        { model: Command, as: 'commands', limit: 20, order: [['created_at', 'DESC']], required: false }
       ]
     });
 
+    if (!device) {
+      device = await Device.findOne({
+        where: { deviceId: req.params.deviceId },
+        include: [
+          { model: DeviceInfo, as: 'deviceInfo', required: false },
+          { model: Location, as: 'locations', limit: 10, order: [['timestamp', 'DESC']], required: false },
+          { model: Command, as: 'commands', limit: 20, order: [['created_at', 'DESC']], required: false }
+        ]
+      });
+    }
+
     if (!device) return res.status(404).json({ success: false, error: 'Device not found' });
 
-    res.json({ success: true, data: normalizeDevice(device.get({ plain: true })) });
-
+    const devicePlain = device.get ? device.get({ plain: true }) : device;
+    res.json({ success: true, data: normalizeDevice(devicePlain) });
   } catch (error) {
-    logger.error(`[${requestId}] Fetch device failed:`, error);
-    res.status(500).json({ success: false, error: error.message });
+    logger.error(`[${requestId}] Error fetching device:`, error);
+    res.status(500).json({ success: false, error: 'Failed to fetch device', message: error.message });
   }
 });
 
-/* -----------------------------------------------------
- * DEVICE — POST LOCATION
- * --------------------------------------------------- */
+// POST /api/devices/location (device -> server)
 router.post('/location', authenticateDevice, async (req, res) => {
   const requestId = req.requestId || 'unknown';
-
   try {
-    const deviceId =
-      req.body.deviceId ||
-      req.body.device_id ||
-      req.deviceId ||
-      (req.device && req.device.deviceId);
+    const deviceId = req.body.deviceId || req.body.device_id || req.deviceId || (req.device && req.device.deviceId) || null;
+    if (!deviceId) return res.status(400).json({ success: false, error: 'Device ID is required' });
 
-    if (!deviceId) {
-      return res.status(400).json({ success: false, error: 'Device ID missing' });
+    const { latitude, longitude, altitude, accuracy, speed, bearing, provider, address, battery_level, network_type, is_mock } = req.body;
+
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ success: false, error: 'Latitude & longitude are required' });
     }
 
-    const {
-      latitude,
-      longitude,
-      altitude,
-      accuracy,
-      speed,
-      bearing,
-      provider,
-      address,
-      battery_level,
-      network_type,
-      is_mock
-    } = req.body;
-
-    if (latitude == null || longitude == null) {
-      return res.status(400).json({ success: false, error: 'Latitude & longitude required' });
+    let resolvedAddress = address || null;
+    if (!resolvedAddress) {
+      try {
+        const addr = await reverseGeocode(latitude, longitude);
+        if (addr) resolvedAddress = addr;
+      } catch (err) {
+        logger.warn(`[${requestId}] Reverse geocode failed:`, err && err.message ? err.message : err);
+      }
     }
 
-    let resolvedAddress =
-      req.body.address || await reverseGeocode(latitude, longitude);
-
-    // Save location
-    await Location.create({
+    const location = await Location.create({
       deviceId,
       latitude,
       longitude,
@@ -207,63 +190,55 @@ router.post('/location', authenticateDevice, async (req, res) => {
       timestamp: new Date(),
       battery_level,
       network_type,
-      is_mock: !!is_mock
+      is_mock: is_mock ? !!is_mock : false
     });
 
-    // 🔥 Mark device ONLINE
-    await Device.update({
-      isOnline: true,
-      status: 'online',
-      lastSeen: new Date()
-    }, { where: { deviceId } });
+    // update device lastSeen + status + isOnline
+    try {
+      const device = await Device.findOne({ where: { deviceId } });
+      if (device) {
+        await device.update({ lastSeen: new Date(), status: 'online', isOnline: true });
+      }
+    } catch (err) {
+      logger.warn(`[${requestId}] Could not update device lastSeen:`, err);
+    }
 
-    // Broadcast for admin live map
+    // emit
     if (req.io) {
       try {
         req.io.to('admin-room').emit('location-update', {
-          deviceId,
-          latitude,
-          longitude,
-          address: resolvedAddress,
-          timestamp: location.timestamp || location.createdAt || new Date()
+          deviceId, latitude, longitude, address: resolvedAddress, timestamp: location.timestamp || location.createdAt || new Date()
         });
       } catch (emitErr) {
         logger.warn(`[${requestId}] Emit failed for location-update:`, emitErr);
       }
     }
 
-    res.json({ success: true });
-
+    res.json({ success: true, message: 'Location saved', data: location });
   } catch (error) {
-    logger.error(`[${requestId}] Location error:`, error);
-    res.status(500).json({ success: false, error: error.message });
+    logger.error(`[${requestId}] Location save error:`, error);
+    res.status(500).json({ success: false, error: 'Server error', message: error.message });
   }
 });
 
-/* -----------------------------------------------------
- * ADMIN — LOCATION HISTORY (alias merged)
- * --------------------------------------------------- */
-router.get(['/:deviceId/locations', '/:deviceId/location/history'],
-  authenticateToken,
-  requireAdmin,
-  async (req, res) => {
+// ALIAS: GET device location history (supports both ...)
+router.get(['/:deviceId/locations', '/:deviceId/location/history'], authenticateToken, requireAdmin, async (req, res) => {
+  const requestId = req.requestId || 'unknown';
+  try {
+    // find device by PK or by deviceId field
+    let device = await Device.findByPk(req.params.deviceId);
+    if (!device) device = await Device.findOne({ where: { deviceId: req.params.deviceId } });
+    if (!device) return res.status(404).json({ success: false, error: 'Device not found' });
 
-    const requestId = req.requestId || 'unknown';
+    const { limit = 500, since } = req.query;
+    const where = { deviceId: device.deviceId };
+    if (since) where.timestamp = { [Op.gte]: new Date(since) };
 
-    try {
-      const device = await Device.findByPk(req.params.deviceId);
-      if (!device) return res.status(404).json({ success: false, error: 'Device not found' });
-
-      const { limit = 500, since } = req.query;
-
-      const where = { deviceId: device.deviceId };
-      if (since) where.timestamp = { [Op.gte]: new Date(since) };
-
-      const locations = await Location.findAll({
-        where,
-        order: [['timestamp', 'DESC']],
-        limit: Number(limit)
-      });
+    const locations = await Location.findAll({
+      where,
+      order: [['timestamp', 'DESC']],
+      limit: parseInt(limit, 10)
+    });
 
       res.json({ success: true, data: locations });
 
