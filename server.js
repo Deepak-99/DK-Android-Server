@@ -1,21 +1,28 @@
-// server.js (corrected & stabilized)
-// 'use strict' kept for safety
+// server.js (restored full-featured, non-blocking, production-ready)
 'use strict';
 
 console.log('🔍 Server.js is being loaded...');
 
-const http = require('http');
+const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
+const WebSocket = require('ws');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-// Basic environment logging
+// utils & logger (safe require)
+const logger = require('./utils/logger');
+
+// ----------------------------------------------------------------------------------
+// Environment info
+// ----------------------------------------------------------------------------------
 console.log('📝 Loading environment variables...');
 console.log('⚙️ Environment:', process.env.NODE_ENV || 'development');
 console.log('📁 Current directory:', process.cwd());
-
-// Keep printing non-sensitive env vars for debugging
 console.log('🔑 Environment variables:', {
   NODE_ENV: process.env.NODE_ENV,
   PORT: process.env.PORT,
@@ -26,33 +33,41 @@ console.log('🔑 Environment variables:', {
   DB_DIALECT: process.env.DB_DIALECT
 });
 
-console.log('📦 Loading core dependencies...');
-
-let WebSocketService;
+// ----------------------------------------------------------------------------------
+// Prepare log directories (like original)
+// ----------------------------------------------------------------------------------
 try {
-  // require the class only (do not instantiate until io exists)
-  WebSocketService = require('./services/WebSocketService');
-  console.log('✅ WebSocketService module required successfully');
-} catch (wsError) {
-  console.error('❌ Failed to require WebSocketService module:', wsError);
-  throw wsError;
+  const logDir = path.join(__dirname, 'logs');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+
+  const webLogDir = path.join(__dirname, 'logs', 'websocket');
+  if (!fs.existsSync(webLogDir)) fs.mkdirSync(webLogDir, { recursive: true });
+
+  console.log('📂 Initializing log directories...');
+  console.log('✅ File logging enabled');
+} catch (err) {
+  console.warn('⚠️ Could not initialize log directories:', err);
 }
 
-const helmet = require('helmet');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-
-console.log('🔌 Loading database configuration...');
+// ----------------------------------------------------------------------------------
+// Load DB config (but do NOT sync here)
+// ----------------------------------------------------------------------------------
 let sequelize;
+let models = {};
 try {
-  const dbConfig = require('./config/database');
-  sequelize = dbConfig.sequelize;
+  const db = require('./config/database');
+  sequelize = db.sequelize;
+  models = db;
+  console.log('🔌 Loading database configuration...');
   console.log('✅ Database configuration loaded');
-} catch (error) {
-  console.error('❌ Failed to load database configuration:', error);
-  process.exit(1);
+} catch (err) {
+  console.error('❌ Failed to load database configuration:', err);
+  // do not exit here; we'll fail later if DB is required
 }
 
+// ----------------------------------------------------------------------------------
+// Express + server
+// ----------------------------------------------------------------------------------
 console.log('\n=== 🚀 Initializing Express app ===');
 const app = express();
 console.log('✅ Express app created');
@@ -62,51 +77,47 @@ const server = http.createServer(app);
 console.log('✅ HTTP server created');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
-console.log(`📡 Server will run on port: ${PORT}`);
 
-const logger = require('./utils/logger');
-const { ensureIsActiveColumn } = require('./utils/syncHelpers');
+// Small helpers for logging
+const debugLog = (...args) => (logger && logger.debug ? logger.debug(...args) : console.debug(...args));
+const infoLog = (...args) => (logger && logger.info ? logger.info(...args) : console.info(...args));
+const warnLog = (...args) => (logger && logger.warn ? logger.warn(...args) : console.warn(...args));
+const errorLog = (...args) => (logger && logger.error ? logger.error(...args) : console.error(...args));
 
-const debug = (...args) => (logger && logger.debug ? logger.debug(...args) : console.debug(...args));
-const info = (...args) => (logger && logger.info ? logger.info(...args) : console.info(...args));
-const warn = (...args) => (logger && logger.warn ? logger.warn(...args) : console.warn(...args));
-const error = (...args) => (logger && logger.error ? logger.error(...args) : console.error(...args));
+// Pretty startup banner
+infoLog('='.repeat(80));
+infoLog('STARTING HAWKSHAW SERVER');
+infoLog('='.repeat(80));
+infoLog(`Node.js version: ${process.version}`);
+infoLog(`Platform: ${process.platform} ${process.arch}`);
+infoLog(`Environment: ${process.env.NODE_ENV || 'development'}`);
+infoLog(`Port: ${PORT}`);
+infoLog('='.repeat(80) + '\n');
 
-// Log environment info
-info('='.repeat(80));
-info('STARTING HAWKSHAW SERVER');
-info('='.repeat(80));
-info(`Node.js version: ${process.version}`);
-info(`Platform: ${process.platform} ${process.arch}`);
-info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-info(`Port: ${PORT}`);
-info('='.repeat(80) + '\n');
+debugLog('Debug logging is enabled');
 
-debug('Debug logging is enabled');
-
-// ---------- security + middleware ----------
-// Helmet config: disable contentSecurityPolicy here to avoid accidental double headers.
-// We'll set minimal safe headers manually (once) below.
+// ----------------------------------------------------------------------------------
+// Security & Middleware (with original header handling)
+// ----------------------------------------------------------------------------------
 try {
-    const helmetConfig = {
-        contentSecurityPolicy: false,
-        crossOriginEmbedderPolicy: false,
-        crossOriginOpenerPolicy: false,
-        crossOriginResourcePolicy: false
-    };
+  // Use helmet but disable CSP here to avoid double header issues in admin SPA
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false
+  }));
 
-    app.use(helmet(helmetConfig));
-
-// ❗ Remove ALL manual COEP/COOP headers
-    app.use((req, res, next) => {
-        res.removeHeader("Cross-Origin-Embedder-Policy");
-        res.removeHeader("Cross-Origin-Opener-Policy");
-        res.removeHeader("Cross-Origin-Resource-Policy");
-        next();
-    });
+  // Remove COEP/COOP/COEP headers explicitly (original had this)
+  app.use((req, res, next) => {
+    res.removeHeader('Cross-Origin-Embedder-Policy');
+    res.removeHeader('Cross-Origin-Opener-Policy');
+    res.removeHeader('Cross-Origin-Resource-Policy');
+    next();
+  });
 
   const corsOptions = {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.FRONTEND_URL || '*',
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -118,27 +129,38 @@ try {
   const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { error: 'Too many requests, please try again later.' } });
   app.use('/api/', apiLimiter);
 
-  // Body parsing
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  debug('Security and middleware initialized');
+  debugLog('Security and middleware initialized');
 } catch (err) {
-  error('Failed to initialize middleware:', err);
+  errorLog('Failed to initialize middleware:', err);
   throw err;
 }
 
-// ---------- REQUEST LOGGER ----------
+// ----------------------------------------------------------------------------------
+// Request logger - restored from original (wrap res.send, compute durations, log response body lightly)
+// ----------------------------------------------------------------------------------
 app.use((req, res, next) => {
   const requestId = Math.random().toString(36).substring(2, 10);
   const start = Date.now();
   req.requestId = requestId;
 
-  debug(`[${requestId}] ====== INCOMING REQUEST ======`);
-  debug(`[${requestId}] ${req.method} ${req.originalUrl}`);
+  debugLog(`[${requestId}] ====== INCOMING REQUEST ======`);
+  debugLog(`[${requestId}] ${req.method} ${req.originalUrl}`);
 
   if (req.query && Object.keys(req.query).length) {
-    debug(`[${requestId}] Query:`, JSON.stringify(req.query));
+    debugLog(`[${requestId}] Query:`, JSON.stringify(req.query));
+  }
+
+  if (req.body && Object.keys(req.body).length) {
+    // avoid logging huge bodies
+    try {
+      const bodyPreview = JSON.stringify(req.body).slice(0, 2000);
+      debugLog(`[${requestId}] Body preview:`, bodyPreview);
+    } catch (e) {
+      debugLog(`[${requestId}] Body: (could not stringify)`);
+    }
   }
 
   const originalSend = res.send;
@@ -153,64 +175,53 @@ app.use((req, res, next) => {
     const statusCode = res.statusCode;
     const logMessage = `[${requestId}] ${req.method} ${req.originalUrl} ${statusCode} ${duration}ms - ${req.ip}`;
 
-    if (statusCode >= 500) error(logMessage);
-    else if (statusCode >= 400) warn(logMessage);
-    else info(logMessage);
+    if (statusCode >= 500) errorLog(logMessage);
+    else if (statusCode >= 400) warnLog(logMessage);
+    else infoLog(logMessage);
 
     if (responseBody && typeof responseBody !== 'undefined') {
-      if (typeof responseBody === 'string') {
-        // attempt to parse JSON for clean logging; if fails, log the raw string
-        try {
-          debug(`[${requestId}] Response Body:`, JSON.stringify(JSON.parse(responseBody), null, 2));
-        } catch {
-          debug(`[${requestId}] Response Body (raw string)`);
+      try {
+        if (typeof responseBody === 'string') {
+          debugLog(`[${requestId}] Response Body (string):`, responseBody.slice(0, 2000));
+        } else {
+          debugLog(`[${requestId}] Response Body:`, JSON.stringify(responseBody).slice(0, 2000));
         }
-      } else {
-        debug(`[${requestId}] Response Body:`, JSON.stringify(responseBody, null, 2));
+      } catch (e) {
+        debugLog(`[${requestId}] Response Body: (could not stringify)`);
       }
     }
 
-    debug(`[${requestId}] ====== END REQUEST ======\n`);
+    debugLog(`[${requestId}] ====== END REQUEST ======\n`);
   });
 
   next();
 });
 
-// ---------- static (use default MIME handling; only add security header) ----------
+// ----------------------------------------------------------------------------------
+// Static assets (admin + public)
+// ----------------------------------------------------------------------------------
 const staticOptions = {
   setHeaders: (res /*, filePath */) => {
-    // Avoid overriding JS MIME types — let Express/static determine correct types.
-    // Keep security header only:
     res.setHeader('X-Content-Type-Options', 'nosniff');
   }
 };
-
 app.use(express.static(path.join(__dirname, 'public'), staticOptions));
 app.use('/admin', express.static(path.join(__dirname, 'public', 'admin'), staticOptions));
 
-// ---------- attach io to requests (uses app.get('io') at runtime) ----------
+// ----------------------------------------------------------------------------------
+// Attach io placeholder to req (io will be set later)
+// ----------------------------------------------------------------------------------
 let io = null;
 let webSocketService = null;
 function attachIo(req, res, next) {
-  // get io from app locals so we can attach even if initSocketIO runs later
   req.io = req.app.get('io') || null;
   next();
 }
 app.use(attachIo);
 
-// ---------- routers (mount once, after request logger and static) ----------
-const authRouter = require('./routes/auth');
-const devicesRouter = require('./routes/devices');
-const dashboardRouter = require('./routes/dashboard');
-
-app.use('/api/auth', authRouter);
-app.use('/api/devices', devicesRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use("/api", require("./routes/stream"));
-app.use("/api/devices/:deviceId/fs", require("./routes/devicefs"));
-
-
-// ---------- basic routes ----------
+// ----------------------------------------------------------------------------------
+// Basic routes (keep original root and test routes)
+// ----------------------------------------------------------------------------------
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -223,196 +234,236 @@ app.get('/', (req, res) => {
 
 app.get('/api/test', (req, res) => res.json({ success: true, message: 'Test route is working' }));
 
-// ---------- admin SPA fallback ----------
+// ----------------------------------------------------------------------------------
+// Admin SPA fallback (original behavior)
+// ----------------------------------------------------------------------------------
 app.get('/admin*', (req, res) => {
   const indexPath = path.join(__dirname, 'public', 'admin', 'index.html');
   res.sendFile(indexPath);
 });
 
-// ---------- 404 & error (error handler must be last) ----------
-app.use((req, res) => {
-  warn(`404 - ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ success: false, error: 'API endpoint not found' });
-});
-
-app.use((err, req, res, next) => {
-  logger.error('Unhandled error:', { error: err.message, stack: err.stack });
-  res.status(err.status || 500).json({
-    success: false,
-    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-  });
-});
-
-// ---------- DB connect helper ----------
-async function connectToDatabase() {
+// ----------------------------------------------------------------------------------
+// DB connect + sync helper (restored with ensureIsActiveColumn support)
+// ----------------------------------------------------------------------------------
+const { ensureIsActiveColumn } = (() => {
   try {
-    console.log('⏱️  Authenticating database connection...');
-    await sequelize.authenticate();
-    console.log('✅ Database authentication successful');
+    return require('./utils/syncHelpers');
+  } catch (e) {
+    return { ensureIsActiveColumn: null };
+  }
+})();
 
-    console.log('⏱️  Syncing models (alter:false)...');
-    await sequelize.sync({ alter: false });
-    console.log('✅ Models synced');
+async function connectToDatabase() {
+  const connectionTimeout = setTimeout(() => {
+    logger.error('Database connection timeout: Could not connect within 30 seconds');
+    process.exit(1);
+  }, 30000);
 
+  try {
+    const startTime = Date.now();
+    logger.info('Initializing database connection...');
+
+    // Create database if needed and then authenticate/sync
+    if (sequelize && typeof sequelize.authenticate === 'function') {
+      logger.info('Authenticating database connection...');
+      await sequelize.authenticate();
+    } else {
+      throw new Error('Sequelize is not initialized');
+    }
+
+    logger.info('Syncing database models...');
+    const syncOptions = {
+      alter: false,
+      logging: (msg) => logger.debug(`[DB SYNC] ${msg}`)
+    };
+    await sequelize.sync(syncOptions);
+
+    // Ensure active column if provided
     if (typeof ensureIsActiveColumn === 'function') {
       try {
         await ensureIsActiveColumn();
-        console.log('✅ ensureIsActiveColumn completed');
-      } catch (ensureErr) {
-        console.warn('⚠️ ensureIsActiveColumn failed (continuing):', ensureErr.message || ensureErr);
+        logger.info('ensureIsActiveColumn completed');
+      } catch (err) {
+        logger.warn('ensureIsActiveColumn failed (continuing):', err.message || err);
       }
     }
 
+    clearTimeout(connectionTimeout);
+    const syncDuration = ((Date.now() - startTime) / 1000).toFixed(2);
+    logger.info(`Database synced successfully in ${syncDuration}s`, {
+      database: process.env.DB_NAME,
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT
+    });
     return true;
+  } catch (error) {
+    clearTimeout(connectionTimeout);
+    logger.error(`Error syncing database: ${error.message}`, { stack: error.stack });
+    throw error;
+  }
+}
+
+// ----------------------------------------------------------------------------------
+// Socket initialization (Socket.IO + raw WebSocket).
+// WebSocketService required lazily here (after DB connection and after io exists)
+// ----------------------------------------------------------------------------------
+function initSocketIO() {
+  // Create Socket.IO server bound to the http server
+  io = new Server(server, { cors: { origin: process.env.FRONTEND_URL || '*', methods: ['GET', 'POST'] } });
+  app.set('io', io);
+
+  // Require and instantiate WebSocketService AFTER io exists (avoid circular require)
+  try {
+    const WebSocketServiceClass = require('./services/WebSocketService');
+    webSocketService = new WebSocketServiceClass(io);
+    app.set('webSocketService', webSocketService);
+    console.log('✅ WebSocketService initialized');
   } catch (err) {
-    console.error('❌ Database connection failed:', err);
+    console.warn('⚠️ WebSocketService failed to initialize:', err && err.message);
+  }
+
+  // Raw WebSocket (noServer)
+  const rawWSS = new WebSocket.Server({ noServer: true });
+
+  rawWSS.on('connection', (ws, req) => {
+    console.log('🔌 Raw WebSocket connected:', req.url);
+    // Optionally: attach listeners here
+    ws.on('message', (msg) => {
+      debugLog('RawWS message:', msg.toString().slice(0, 1000));
+    });
+  });
+
+  // Install a top-level server upgrade handler once (FIX for freeze)
+  server.on('upgrade', (req, socket, head) => {
+    try {
+      const { url } = req;
+
+      // 1) RAW WebSocket (Admin Panel)
+      if (url === '/ws' || url.startsWith('/ws?')) {
+        rawWSS.handleUpgrade(req, socket, head, (ws) => {
+          rawWSS.emit('connection', ws, req);
+        });
+        return;
+      }
+
+      // 2) Socket.IO Upgrade (handled internally by engine.io)
+      if (url.startsWith('/socket.io/')) {
+        return;
+      }
+
+      // 3) Unknown upgrade -> safely close
+      socket.destroy();
+    } catch (err) {
+      console.error('Upgrade handler error:', err);
+      socket.destroy();
+    }
+  });
+
+  console.log('✅ Socket.IO and raw WebSocket upgrade handlers installed');
+}
+
+// ----------------------------------------------------------------------------------
+// Lazy load and mount routers after DB connect to avoid blocking at module-load
+// ----------------------------------------------------------------------------------
+let mountedRoutes = false;
+function mountRouters() {
+  if (mountedRoutes) return;
+  try {
+    const authRouter = require('./routes/auth');
+    const devicesRouter = require('./routes/devices');
+    const dashboardRouter = require('./routes/dashboard');
+    const rbacRouter = require('./routes/rbac');
+
+    app.use('/api/auth', authRouter);
+    app.use('/api/devices', devicesRouter);
+    app.use('/api/dashboard', dashboardRouter);
+    app.use('/api/rbac', rbacRouter);
+
+    // stream & devicefs are mounted here too (they won't run DB queries at load)
+    app.use('/api', require('./routes/stream'));
+    app.use('/api/devices/:deviceId/fs', require('./routes/devicefs'));
+
+    mountedRoutes = true;
+    console.log('✅ Routers mounted');
+  } catch (err) {
+    console.error('Failed to mount routers:', err);
     throw err;
   }
 }
 
-// ---------- Socket.IO init (create io BEFORE server.listen; instantiate service safely) ----------
-function initSocketIO() {
-  // Create io bound to http server
-  io = new Server(server, { cors: { origin: process.env.FRONTEND_URL || '*', methods: ['GET', 'POST'] } });
-
-  // make io available via app
-  app.set('io', io);
-
-  webSocketService = new WebSocketService(io);
-  app.set('webSocketService', webSocketService);
-
-  console.log('✅ WebSocketService initialized');
-}
-
-//
-// 🔥🔥🔥 RAW WEB SOCKET + SOCKET.IO MULTI-PROTOCOL UPGRADE
-//
-const WebSocket = require('ws');
-
-// Raw WebSocket server (Admin)
-const rawWSS = new WebSocket.Server({ noServer: true });
-
-rawWSS.on('connection', (ws) => {
-    console.log('🔌 Raw WebSocket /ws connected');
-    server.on('upgrade', (req, socket, head) => {
-        const {url} = req;
-
-        // 1) RAW WebSocket (Admin Panel)
-        if (url === '/ws' || url.startsWith('/ws?')) {
-            rawWSS.handleUpgrade(req, socket, head, (ws) => {
-                rawWSS.emit('connection', ws, req);
-            });
-            return; // IMPORTANT: stop further handling
-        }
-
-        // 2) Socket.IO Upgrade (handled internally by engine.io)
-        if (url.startsWith('/socket.io/')) {
-            // Do not manually handle upgrade
-            return;
-        }
-
-        // 3) Unknown upgrade → safely close
-        socket.destroy();
-    })
-});
-
-//
-// END MULTI-PROTOCOL WS SECTION
-//
-
-
-// ---------- listen helper (proper Promise wrapper) ----------
-function listenAsync(port) {
-  return new Promise((resolve, reject) => {
-    server.listen(port, (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
-}
-
-// ---------- startup ----------
-async function startApp() {
+// ----------------------------------------------------------------------------------
+// Route printing utility (development only) — restored from original
+// ----------------------------------------------------------------------------------
+function printAvailableRoutes() {
   try {
-    console.log('Starting application...');
-    // 1) DB first (so models exist for routes that may query DB during first requests)
-    await connectToDatabase();
+    if (process.env.NODE_ENV === 'production') return;
+    if (!app._router) return;
 
-    // 2) Initialize Socket.IO and WebSocketService (before routes use req.io)
-    initSocketIO();
-
-    // 3) Start listening
-    await listenAsync(PORT);
-    console.log(`✅ Server is running on port ${PORT}`);
-
-    // Optional: show available routes in non-production
-    if (process.env.NODE_ENV !== 'production' && app._router) {
-      try {
-        const routes = [];
-        function printRoutes(layer, base = '') {
-          if (layer.route && layer.route.path) {
-            const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
-            routes.push({ path: base + layer.route.path, methods });
-          } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
-            layer.handle.stack.forEach(l => printRoutes(l, base));
-          } else if (layer.name === 'bound dispatch' && layer.route) {
-            const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
-            routes.push({ path: base + layer.route.path, methods });
-          } else if (layer.regexp && layer.handle && layer.handle.stack) {
-            // mounted router
-            layer.handle.stack.forEach(stackItem => printRoutes(stackItem, base));
-          }
-        }
-        app._router.stack.forEach(layer => printRoutes(layer));
-        info('Available routes:');
-        console.table(routes);
-      } catch (e) {
-        debug('Could not print routes:', e);
+    const routes = [];
+    function printRoutes(layer, base = '') {
+      if (layer.route && layer.route.path) {
+        const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
+        routes.push({ path: base + layer.route.path, methods });
+      } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
+        layer.handle.stack.forEach(l => printRoutes(l, base));
+      } else if (layer.regexp && layer.handle && layer.handle.stack) {
+        layer.handle.stack.forEach(stackItem => printRoutes(stackItem, base));
       }
     }
-
-    console.log('Application started successfully');
-  } catch (err) {
-    console.error('Fatal error during application startup:', err);
-    // Wait a little to allow logs to flush
-    setTimeout(() => process.exit(1), 100);
+    app._router.stack.forEach(layer => printRoutes(layer));
+    infoLog('Available routes:');
+    console.table(routes);
+  } catch (e) {
+    debugLog('Could not print routes:', e);
   }
 }
 
-// ---------- graceful shutdown ----------
-function gracefulShutdown() {
+// ----------------------------------------------------------------------------------
+// Graceful shutdown — restored from original (closes server, DB, websocketservice)
+// ----------------------------------------------------------------------------------
+async function gracefulShutdown() {
   console.log('Shutting down gracefully...');
-  server.close(async () => {
-    console.log('Server closed');
-    try {
-      if (sequelize) await sequelize.close();
-      console.log('Database connection closed');
-    } catch (e) {
-      console.error('Error closing DB', e);
-    }
-    try {
-      if (webSocketService && typeof webSocketService.shutdown === 'function') {
-        await webSocketService.shutdown();
-        console.log('WebSocketService shutdown complete');
-      }
-    } catch (e) {
-      console.error('Error shutting down WebSocketService', e);
-    }
-    process.exit(0);
-  });
+  try {
+    server.close(async (err) => {
+      if (err) console.error('Error closing server:', err);
+      else console.log('HTTP server closed');
 
-  setTimeout(() => {
-    console.error('Forcing shutdown due to timeout');
+      try {
+        if (sequelize) {
+          await sequelize.close();
+          console.log('Database connection closed');
+        }
+      } catch (e) {
+        console.error('Error closing DB connection:', e);
+      }
+
+      try {
+        if (webSocketService && typeof webSocketService.shutdown === 'function') {
+          await webSocketService.shutdown();
+          console.log('WebSocketService shutdown complete');
+        }
+      } catch (e) {
+        console.error('Error shutting down WebSocketService', e);
+      }
+
+      process.exit(0);
+    });
+
+    // Force exit if not closed within time
+    setTimeout(() => {
+      console.error('Forcing shutdown due to timeout');
+      process.exit(1);
+    }, 5000);
+  } catch (e) {
+    console.error('Graceful shutdown failed:', e);
     process.exit(1);
-  }, 5000);
+  }
 }
 
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  // Allow logs to flush then exit
   setTimeout(() => process.exit(1), 100);
 });
 process.on('unhandledRejection', (reason, promise) => {
@@ -420,11 +471,64 @@ process.on('unhandledRejection', (reason, promise) => {
   setTimeout(() => process.exit(1), 100);
 });
 
-// Start
+// ----------------------------------------------------------------------------------
+// Start application: connect DB -> mount routers -> init sockets -> listen
+// ----------------------------------------------------------------------------------
+async function startApp() {
+  try {
+    console.log('Starting application...');
+
+    // 1) DB connect & sync
+    await connectToDatabase();
+
+    // 2) mount routers (after DB is ready)
+    mountRouters();
+
+      // ----------------------------------------------------------------------------------
+// 404 handler & final error handler (must be last)
+// ----------------------------------------------------------------------------------
+      app.use((req, res) => {
+          warnLog(`404 - ${req.method} ${req.originalUrl}`);
+          res.status(404).json({ success: false, error: 'API endpoint not found' });
+      });
+
+      app.use((err, req, res, next) => {
+          logger.error('Unhandled error:', { error: err.message, stack: err.stack });
+          res.status(err.status || 500).json({
+              success: false,
+              error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+              stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+          });
+      });
+
+    // 3) initialize sockets & websocket service
+    initSocketIO();
+
+    // 4) start listening
+    await new Promise((resolve, reject) => {
+      server.listen(PORT, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    console.log(`✅ Server is running on port ${PORT}`);
+
+    // Print routes in development
+    printAvailableRoutes();
+
+    console.log('Application started successfully');
+  } catch (err) {
+    console.error('Fatal error during application startup:', err);
+    // allow logs to flush, then exit
+    setTimeout(() => process.exit(1), 100);
+  }
+}
+
 startApp().catch(err => {
   console.error('startApp failed:', err);
   process.exit(1);
 });
 
-// Export app for tests
+// export for tests
 module.exports = { app, server, startApp, gracefulShutdown };

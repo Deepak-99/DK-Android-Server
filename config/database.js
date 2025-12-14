@@ -323,31 +323,37 @@ const models = loadModels();
 
 // Initialize models
 const db = {
-  sequelize,
-  Sequelize,
-  ...models,
-  testConnection,
-  loadModels,
-  ensureDeviceIdIndex
+    sequelize,
+    Sequelize,
+    ...models,
+    testConnection,
+    loadModels,
+    ensureDeviceIdIndex
 };
 
 // Export the connection and models
 module.exports = db;
 
-// For easier destructuring
+// For easier destructuring + RBAC models
 module.exports.User = models.User;
 module.exports.Device = models.Device;
+module.exports.Role = models.Role;
+module.exports.Permission = models.Permission;
+module.exports.UserRole = models.UserRole;
+module.exports.RolePermission = models.RolePermission;
+module.exports.UserPermission = models.UserPermission;
 module.exports.ensureDeviceIdIndex = ensureDeviceIdIndex;
 
 // Test the database connection when this module is loaded directly
 if (require.main === module) {
-  testConnection()
-    .then(() => {
-      logger.info('Database connection test completed successfully');
-      process.exit(0);
-    })
-    .catch(err => {
-      logger.error('Database connection test failed:', err);
-      process.exit(1);
-    });
+    testConnection()
+        .then(() => {
+            logger.info('Database connection test completed successfully');
+            process.exit(0);
+        })
+        .catch(err => {
+            logger.error('Database connection test failed:', err);
+            process.exit(1);
+        });
 }
+

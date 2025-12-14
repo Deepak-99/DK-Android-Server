@@ -1,5 +1,5 @@
 // services/deviceFileAgent.js
-const wsClient = require("./wsClient"); // You must connect this to your existing WebSocket system
+const wsClient = require("./wsClient");
 
 module.exports = {
     async list(deviceId, path) {

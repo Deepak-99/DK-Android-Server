@@ -329,5 +329,25 @@ module.exports = (sequelize) => {
     }
   };
 
-  return User;
+    // Associations
+    User.associate = (models) => {
+        if (models.Role && models.UserRole) {
+            User.belongsToMany(models.Role, {
+                through: models.UserRole,
+                foreignKey: 'user_id',
+                otherKey: 'role_id',
+                as: 'roles',
+            });
+        }
+
+        if (models.UserPermission) {
+            User.hasMany(models.UserPermission, {
+                foreignKey: 'userId',
+                as: 'permissions',
+            });
+        }
+    };
+
+
+    return User;
 };

@@ -7,60 +7,74 @@ export class ApiService {
         this.baseURL = '/api';
     }
 
-    getAuthHeader() {
-        const token = AuthService.getToken();
-        return token ? { 'Authorization': `Bearer ${token}` } : {};
+  getAuthHeader() {
+    const token = AuthService.getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  normalizeUrl(endpoint) {
+    if (!endpoint.startsWith('/')) endpoint = '/' + endpoint;
+
+    // If already absolute API path → return as is
+    if (endpoint.startsWith('/api/')) return endpoint;
+
+    // Otherwise prefix baseURL
+    return `${this.baseURL}${endpoint}`;
+  }
+
+  async request(method, endpoint, data = null) {
+    const url = this.normalizeUrl(endpoint);
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...this.getAuthHeader()
+    };
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: data ? JSON.stringify(data) : undefined
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      // Auto logout on 401
+      if (res.status === 401) {
+        AuthService.clearSession();
+        window.location.href = '/admin';
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(json.error || json.message || `HTTP ${res.status}`);
+      }
+
+      return json;
+    } catch (err) {
+      handleError(`API request failed: ${method} ${endpoint}`, err);
+      throw err;
     }
+  }
 
-    async request(method, endpoint, data = null) {
-        const url = `${this.baseURL}${endpoint}`;
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            ...this.getAuthHeader()
-        };
-
-        try {
-            const response = await fetch(url, {
-                method,
-                headers,
-                body: data ? JSON.stringify(data) : undefined,
-                credentials: 'include' // Include cookies for session handling
-            });
-
-            // Handle 401 Unauthorized
-            if (response.status === 401) {
-                AuthService.clearToken();
-                window.location.href = '/admin';
-                return;
-            }
-
-            const responseData = await response.json().catch(() => ({}));
-
-            if (!response.ok) {
-                throw new Error(responseData.message || `HTTP error! status: ${response.status}`);
-            }
-
-            return responseData;
-        } catch (error) {
-            handleError(`API request failed: ${method} ${endpoint}`, error);
-            throw error;
-        }
+  get(endpoint, params = null) {
+    if (params) {
+      const qs = new URLSearchParams(params).toString();
+      endpoint += `?${qs}`;
     }
+    return this.request('GET', endpoint);
+  }
 
-    async get(endpoint) {
-        return this.request('GET', endpoint);
-    }
+  post(endpoint, data) {
+    return this.request('POST', endpoint, data);
+  }
 
-    async post(endpoint, data) {
-        return this.request('POST', endpoint, data);
-    }
+  put(endpoint, data) {
+    return this.request('PUT', endpoint, data);
+  }
 
-    async put(endpoint, data) {
-        return this.request('PUT', endpoint, data);
-    }
-
-    async delete(endpoint) {
-        return this.request('DELETE', endpoint);
-    }
+  delete(endpoint) {
+    return this.request('DELETE', endpoint);
+  }
 }

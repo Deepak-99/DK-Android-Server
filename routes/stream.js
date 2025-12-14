@@ -1,35 +1,68 @@
-const express = require("express");
+// routes/stream.js
+const express = require('express');
 const router = express.Router();
-const eventBus = require("../eventBus");
+const eventBus = require('../eventBus');
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
-// SSE STREAM FOR LIVE LOCATION UPDATES
-router.get("/devices/:deviceId/locations/stream", (req, res) => {
+/**
+ * SSE stream for live location updates for a single device
+ * URL: /api/devices/:deviceId/locations/stream?token=JWT
+ */
+router.get(
+  '/devices/:deviceId/locations/stream',
+  authenticateToken,
+  requireAdmin,
+  (req, res) => {
     const { deviceId } = req.params;
 
-    // Headers required for SSE
+    // Required SSE headers
     res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no"
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no', // disable buffering on nginx
     });
 
-    res.write("\n");
+    // Initial padding (helps with some proxies)
+    res.write('\n');
 
     const channel = `location:${deviceId}`;
 
     const sendEvent = (loc) => {
-        res.write(`data: ${JSON.stringify(loc)}\n\n`);
+      // Single consistent event format
+      const payload = {
+        deviceId,
+        ...loc,
+      };
+
+      res.write(`event: location\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
-    // Listen for events
+    // Subscribe to EventBus
     eventBus.on(channel, sendEvent);
 
-    // Cleanup on disconnect
-    req.on("close", () => {
-        eventBus.removeListener(channel, sendEvent);
+    // Heartbeat to keep connections alive
+    const heartbeatInterval = setInterval(() => {
+      res.write(`event: heartbeat\n`);
+      res.write(`data: ${JSON.stringify({ ts: Date.now() })}\n\n`);
+    }, 15000);
+
+    const cleanup = () => {
+      eventBus.removeListener(channel, sendEvent);
+      clearInterval(heartbeatInterval);
+      try {
         res.end();
-    });
-});
+      } catch (_) {
+        // ignore
+      }
+    };
+
+    // Client closed connection
+      res.on('close', cleanup);
+      res.on('finish', cleanup);
+      req.on('aborted', cleanup);
+  }
+);
 
 module.exports = router;

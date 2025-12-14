@@ -54,7 +54,7 @@ class AuthService {
     this.clearSession();
     // best-effort server-side logout (fire-and-forget)
     try {
-      fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${this.getToken()}` } }).catch(()=>{});
+      fetch('/logout', { method: 'POST', headers: { Authorization: `Bearer ${this.getToken()}` } }).catch(()=>{});
     } catch (_) {}
     // go to admin root (login will appear)
     window.location.href = redirect;
@@ -62,7 +62,7 @@ class AuthService {
 
   static async login(email, password) {
     try {
-      const res = await fetch('/api/auth/admin/login', {
+      const res = await fetch('/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -89,7 +89,7 @@ class AuthService {
     if (!token) return false;
 
     try {
-      const res = await fetch('/api/auth/verify', {
+      const res = await fetch('/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
       });
