@@ -4,6 +4,8 @@
 
 const { Command, Device } = require("../config/database");
 const logger = require("../utils/logger");
+const ScreenRecorder = require("./ScreenRecorderService");
+const recorders = new Map();
 
 class WebSocketService {
     constructor(io) {
@@ -97,6 +99,8 @@ class WebSocketService {
             await this.handleCommandResponse(response);
         });
     }
+
+    
 
     /* -----------------------------------------------------------
      * DEVICE DISCONNECT
