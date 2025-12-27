@@ -3,7 +3,6 @@ const { Op } = require('sequelize');
 const { Device, Location } = require('../config/database');
 const { authenticateToken, authenticateDevice, requireAdmin } = require('../middleware/auth');
 const logger = require('../utils/logger');
-const eventBus = require('../eventBus');
 
 const router = express.Router();
 
@@ -50,11 +49,6 @@ router.post('/', authenticateDevice, async (req, res) => {
     });
 
     logger.info(`Location data received from device: ${req.deviceId}`);
-
-      eventBus.emit(`location:${req.deviceId}`, {
-          device_id: req.deviceId,
-          ...location.toJSON()
-      });
 
     // Emit to admin room
     if (req.io) {
@@ -116,14 +110,6 @@ router.post('/bulk', authenticateDevice, async (req, res) => {
     const createdLocations = await Location.bulkCreate(locationData);
 
     logger.info(`Bulk location data received from device: ${req.deviceId}, count: ${locations.length}`);
-
-      const latest = createdLocations[createdLocations.length - 1];
-      if (latest) {
-          eventBus.emit(`location:${req.deviceId}`, {
-              device_id: req.deviceId,
-              ...latest.toJSON()
-          });
-      }
 
     // Emit to admin room
     if (req.io) {

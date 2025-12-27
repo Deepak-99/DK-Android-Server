@@ -1,0 +1,70 @@
+Step 1 — Set JWT secret Update your .env at 
+C:\Android_Server_Project\DK-Hawkshaw.env
+:
+
+JWT_SECRET=your-long-random-secret
+NODE_ENV=development
+Step 2 — Create an admin user I added a script at 
+scripts/create-admin.js
+. Run it once to seed an admin:
+
+Command Prompt (CMD):
+cd C:\Android_Server_Project\DK-Hawkshaw
+node scripts\create-admin.js --email admin@hawkshaw.com --password Admin@1234 --username admin
+PowerShell:
+& "C:\Program Files\nodejs\node.exe" C:\Android_Server_Project\DK-Hawkshaw\scripts\create-admin.js --email admin@example.com --password YourStrongPass123 --username admin
+What the script does:
+
+Connects via Sequelize
+Creates a users row (bcrypt-hashed password), role=admin
+If the user exists but isn’t admin, it elevates role to admin
+Step 3 — Restart the server
+
+Stop current server (Ctrl+C)
+Start again:
+CMD: node server.js
+PowerShell: & "C:\Program Files\nodejs\node.exe" C:\Android_Server_Project\DK-Hawkshaw\server.js
+Step 4 — Login
+
+In the browser, go to your Admin login UI and use the seeded credentials:
+Email: admin@example.com
+Password: YourStrongPass123
+Optional API test with curl:
+
+curl -X POST http://localhost:3000/api/auth/admin/login -H "Content-Type: application/json" -d "{"email":"admin@example.com","password":"YourStrongPass123"}"
+If you still get 401
+
+Confirm the request body names match 
+auth.js
+:
+email and password; password must be >= 6 chars
+Check the DB row:
+"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -h localhost -P 3306 -u hawkshaw_user -ppassword -e "SELECT id,email,role,is_active,login_attempts,locked_until FROM hawkshaw_db.users WHERE email='admin@example.com';"
+Make sure is_active = 1, role = 'admin', and not locked (locked_until is NULL or in the past).
+Silence the “collate” warning (optional)
+
+Edit 
+config/database.js
+. Keep collate in define, remove collate in dialectOptions:
+define: charset: 'utf8mb4', collate: 'utf8mb4_unicode_ci'
+dialectOptions: charset: 'utf8mb4' (no collate)
+What we’ve already fixed for you
+
+Fixed logger methods used by middleware (
+utils/logger.js
+): 
+logApiCall
+, 
+logAuth
+, 
+logCommand
+, 
+logFileOperation
+, 
+logSocket
+Aligned 
+models/Location.js
+ to match your migrations (device_locations, string device_id, association to Device.device_id)
+Disabled automatic schema mutations at runtime in 
+server.js
+ (using SYNC_DB flag); migrations control your schema now.

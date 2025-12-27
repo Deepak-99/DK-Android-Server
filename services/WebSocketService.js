@@ -1,67 +1,63 @@
-// services/WebSocketService.js
-// Fully upgraded but 100% backward-compatible with original version
-// Preserves all functionalities while adding: sendCommandAndWait, heartbeat, promise registry
-
-const { Command, Device } = require("../config/database");
+const { Op } = require("sequelize");
+const { Command, Device } = require("../models");
 const logger = require("../utils/logger");
-const ScreenRecorder = require("./ScreenRecorderService");
-const recorders = new Map();
 
 class WebSocketService {
+    /**
+     * @param {SocketIO.Server} io
+     */
     constructor(io) {
-        if (!io) throw new Error("Socket.IO instance required");
+        console.log("\n=== 🔄 [WebSocketService] Constructor called ===");
+        console.log("📡 Initializing WebSocket service...");
 
-        console.log("\n=== Initializing WebSocketService ===");
+        if (!io) {
+            throw new Error("Socket.IO instance is required");
+        }
 
         this.io = io;
-        this.deviceSockets = new Map();       // deviceId → socket
-        this.commandPromises = new Map();     // commandId → { resolve, reject, timer }
+
+        // Keep devices separated from admin sockets
+        this.deviceSockets = new Map(); // deviceId -> socket
         this.connectionCount = 0;
 
-        this.HEARTBEAT_INTERVAL = 15000;
+        // Register event handlers
+        this.setupEventHandlers();
 
-        this.setupRootHandlers();
-        this.startHeartbeat();
-
-        console.log("✅ WebSocketService ready\n");
+        console.log("✅ [WebSocketService] Initialization completed\n");
     }
 
-    /* -----------------------------------------------------------
-     * ROOT HANDLERS (connection, disconnect, routing)
-     * ---------------------------------------------------------*/
-    setupRootHandlers() {
+    /**
+     * Setup socket event handlers
+     */
+    setupEventHandlers() {
+        console.log("\n=== 🔌 Setting up Socket.IO handlers ===");
+
         this.io.on("connection", (socket) => {
             this.connectionCount++;
-            console.log(`🔌 Socket connected → ${socket.id}`);
+            console.log(`\n🔌 New socket connected → ${socket.id}`);
 
             this.setupAdminEvents(socket);
             this.setupDeviceEvents(socket);
 
             socket.on("disconnect", (reason) => {
-                this.handleDisconnect(socket, reason).catch(console.error);
+                this.handleDisconnect(socket, reason);
             });
 
-            socket.on("error", (err) => console.error("WebSocket error:", err));
+            socket.on("error", (err) => {
+                console.error("❌ WebSocket Error:", err);
+            });
         });
+
+        console.log("✅ WebSocket handlers active");
     }
 
-    /* -----------------------------------------------------------
-     * HEARTBEAT LOOP (keeps online/offline accurate)
-     * ---------------------------------------------------------*/
-    startHeartbeat() {
-        setInterval(() => {
-            for (const [deviceId, socket] of this.deviceSockets.entries()) {
-                socket.emit("ping", { ts: Date.now() });
-            }
-        }, this.HEARTBEAT_INTERVAL);
-    }
-
-    /* -----------------------------------------------------------
-     * ADMIN PANEL EVENTS
-     * ---------------------------------------------------------*/
+    /**
+     * Admin panel events
+     */
     setupAdminEvents(socket) {
         socket.on("admin-connect", () => {
-            console.log("🧑‍💻 Admin connected:", socket.id);
+            console.log("👨‍💼 Admin connected:", socket.id);
+
             socket.join("admin");
 
             this.io.to(socket.id).emit("server-event", {
@@ -69,182 +65,184 @@ class WebSocketService {
                 payload: {
                     connected: true,
                     deviceCount: this.deviceSockets.size,
-                    timestamp: new Date().toISOString()
-                }
+                    timestamp: new Date().toISOString(),
+                },
             });
         });
     }
 
-    /* -----------------------------------------------------------
-     * DEVICE EVENTS
-     * ---------------------------------------------------------*/
+    /**
+     * Device-related events
+     */
     setupDeviceEvents(socket) {
-        // Device registers itself
+        /**
+         * Device registers itself
+         */
         socket.on("register", async ({ deviceId }) => {
             if (!deviceId) return;
 
             console.log(`📱 Device registered → ${deviceId}`);
+
             this.deviceSockets.set(deviceId, socket);
 
             await this.updateDeviceStatus(deviceId, true);
 
             this.broadcastAdmin({
                 type: "device_connected",
-                payload: { deviceId, timestamp: new Date().toISOString() }
+                payload: { deviceId, timestamp: new Date().toISOString() },
             });
         });
 
-        // Device responds to command
+        /**
+         * Device sends command-response
+         */
         socket.on("command-response", async (response) => {
-            await this.handleCommandResponse(response);
+            console.log("🔽 Command response received:", response);
+
+            if (!response.commandId) return;
+
+            await Command.update(
+                {
+                    status: response.success ? "completed" : "failed",
+                    response: response.response || null,
+                    completedAt: new Date(),
+                },
+                { where: { id: response.commandId }, silent: true }
+            );
+
+            this.broadcastAdmin({
+                type: "command_response",
+                payload: {
+                    ...response,
+                    timestamp: new Date().toISOString(),
+                },
+            });
         });
     }
 
-    
-
-    /* -----------------------------------------------------------
-     * DEVICE DISCONNECT
-     * ---------------------------------------------------------*/
+    /**
+     * Handle disconnections
+     */
     async handleDisconnect(socket, reason) {
-        this.connectionCount--;
+        let disconnectedDevice = null;
 
-        let offlineDevice = null;
-
-        for (const [deviceId, s] of this.deviceSockets.entries()) {
+        for (const [deviceId, s] of this.deviceSockets) {
             if (s.id === socket.id) {
-                offlineDevice = deviceId;
+                disconnectedDevice = deviceId;
                 this.deviceSockets.delete(deviceId);
 
-                console.log(`❌ Device offline: ${deviceId}`);
+                console.log(`❌ Device disconnected → ${deviceId} (${socket.id})`);
 
                 await this.updateDeviceStatus(deviceId, false);
 
                 this.broadcastAdmin({
                     type: "device_disconnected",
-                    payload: { deviceId, reason, timestamp: new Date().toISOString() }
+                    payload: {
+                        deviceId,
+                        reason,
+                        timestamp: new Date().toISOString(),
+                    },
                 });
             }
         }
-    }
 
-    /* -----------------------------------------------------------
-     * UPDATE DEVICE STATUS IN DATABASE
-     * ---------------------------------------------------------*/
-    async updateDeviceStatus(deviceId, isOnline) {
-        try {
-            await Device.update(
-                { isOnline, lastSeen: new Date() },
-                { where: { deviceId }, silent: true }
-            );
-        } catch (err) {
-            console.error("Failed to update device status:", err);
+        if (!disconnectedDevice) {
+            console.log(`ℹ Client disconnected (not a device):`, socket.id);
         }
     }
 
-    /* -----------------------------------------------------------
-     * BROADCAST TO ALL ADMINS
-     * ---------------------------------------------------------*/
-    broadcastAdmin(event) {
-        this.io.to("admin").emit("server-event", event);
+    /**
+     * Update online/offline state in DB
+     */
+    async updateDeviceStatus(deviceId, isOnline) {
+        try {
+            await Device.update(
+                {
+                    isOnline,
+                    lastSeen: new Date(),
+                },
+                { where: { deviceId }, silent: true }
+            );
+
+            console.log(
+                `📌 Device ${deviceId} set → ${isOnline ? "ONLINE" : "OFFLINE"}`
+            );
+        } catch (err) {
+            console.error("❌ Failed to update device status:", err);
+        }
     }
 
-    /* -----------------------------------------------------------
-     * ORIGINAL METHOD — preserved exactly
-     * Sends a command & listens for command-response event
-     * ---------------------------------------------------------*/
+    /**
+     * Send event to ALL admin clients
+     */
+    broadcastAdmin(eventObject) {
+        this.io.to("admin").emit("server-event", eventObject);
+    }
+
+    /**
+     * Send a command to a connected device
+     */
     async sendCommand(deviceId, command) {
         const socket = this.deviceSockets.get(deviceId);
 
         if (!socket) {
-            logger.warn(`Device ${deviceId} not online`);
-            return { success: false, error: "Device offline" };
+            return {
+                success: false,
+                error: `Device ${deviceId} is not connected`,
+                timestamp: new Date().toISOString(),
+            };
         }
+
+        const commandId = `cmd_${Date.now()}_${Math.random()
+            .toString(36)
+            .substr(2, 6)}`;
 
         const timeout = command.timeout || 30000;
 
-        const dbCommand = await Command.create({
+        // Save command to DB
+        await Command.create({
+            id: commandId,
             deviceId,
-            command_type: command.type,
-            command_data: command.data || {},
+            commandType: command.type,
+            commandData: command.data || {},
             status: "pending",
-            priority: "normal",
-            sent_at: new Date(),
-            expires_at: new Date(Date.now() + timeout)
+            sentAt: new Date(),
+            timeoutAt: new Date(Date.now() + timeout),
         });
-
-        const commandId = dbCommand.id;
 
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
-                this.commandPromises.delete(commandId);
-                reject(new Error("Command timeout"));
+                socket.removeListener("command-response", onResponse);
+                reject(new Error(`Command timeout (${timeout} ms)`));
             }, timeout);
 
-            this.commandPromises.set(commandId, { resolve, reject, timer });
+            const onResponse = (response) => {
+                if (response.commandId === commandId) {
+                    clearTimeout(timer);
+                    socket.removeListener("command-response", onResponse);
+
+                    resolve({
+                        success: true,
+                        commandId,
+                        response,
+                    });
+                }
+            };
+
+            socket.on("command-response", onResponse);
 
             socket.emit("command", {
                 commandId,
                 type: command.type,
                 data: command.data || {},
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             });
 
-            console.log(`📤 WS command sent → ${deviceId}`, { commandId });
+            console.log(`📤 Sent command to device → ${deviceId}`, {
+                commandId,
+                type: command.type,
+            });
         });
-    }
-
-    /* -----------------------------------------------------------
-     * NEW: PROMISE-BASED COMMAND HANDLER (deviceFS uses this)
-     * ---------------------------------------------------------*/
-    async sendCommandAndWait(deviceId, payload) {
-        return await this.sendCommand(deviceId, {
-            type: payload.type,
-            data: payload.data,
-            timeout: payload.timeout || 20000
-        });
-    }
-
-    /* -----------------------------------------------------------
-     * HANDLE DEVICE COMMAND RESPONSES
-     * ---------------------------------------------------------*/
-    async handleCommandResponse(response) {
-        if (!response || !response.commandId) return;
-
-        const { commandId } = response;
-
-        // Update DB
-        await Command.update(
-            {
-                status: response.success ? "completed" : "failed",
-                response_data: response.response || null,
-                completed_at: new Date()
-            },
-            { where: { id: commandId }, silent: true }
-        );
-
-        // Resolve promise if waiting
-        const entry = this.commandPromises.get(commandId);
-        if (entry) {
-            clearTimeout(entry.timer);
-            entry.resolve(response);
-            this.commandPromises.delete(commandId);
-        }
-
-        this.broadcastAdmin({
-            type: "command_response",
-            payload: { ...response, ts: Date.now() }
-        });
-    }
-
-    /* -----------------------------------------------------------
-     * GRACEFUL SHUTDOWN
-     * ---------------------------------------------------------*/
-    async shutdown() {
-        console.log("🧹 Closing WebSocketService...");
-        for (const socket of this.io.sockets.sockets.values()) {
-            socket.disconnect(true);
-        }
-        this.deviceSockets.clear();
     }
 }
 
