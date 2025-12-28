@@ -1,165 +1,255 @@
-const { Device } = require('../models');
-const logger = require('../utils/logger');
+// controllers/api/v1/deviceController.js
+const { Device, DeviceStatus, User } = require('../../../models');
+const { Op } = require('sequelize');
+const logger = require('../../../utils/logger');
+const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 /**
- * Register or update a device
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<Object>} Response with device data and auth token
+ * Register a new device
  */
 exports.registerDevice = async (req, res) => {
-    const requestId = req.requestId || 'unknown';
-    logger.info(`[${requestId}] Device registration request`);
-    
     try {
         const {
-            deviceId,        // Required: Unique device identifier
-            name,           // Device name
-            model,          // Device model
-            manufacturer,   // Device manufacturer
-            androidVersion, // Android version
-            apiLevel,       // API level
-            imei,           // Device IMEI
-            phoneNumber,    // Phone number
-            fcmToken,       // Firebase Cloud Messaging token
-            appVersion      // App version
+            deviceName,
+            model,
+            manufacturer,
+            osVersion,
+            sdkVersion,
+            appVersion,
+            fcmToken,
+            imei,
+            phoneNumber,
+            simSerial,
+            simOperator,
+            networkOperator,
+            macAddress,
+            ipAddress,
+            deviceType = 'android' // or 'ios'
         } = req.body;
 
-        // Input validation
-        if (!deviceId) {
-            logger.warn(`[${requestId}] Missing required field: deviceId`);
-            return res.status(400).json({
-                success: false,
-                error: 'deviceId is required'
-            });
-        }
+        // Generate device token for API authentication
+        const deviceToken = crypto.randomBytes(32).toString('hex');
+        const deviceId = uuidv4();
 
-        // Check if device exists
-        let device = await Device.findOne({ 
-            where: { deviceId } 
-        });
-
-        const deviceData = {
-            deviceId,
-            name: name || null,
-            model: model || null,
-            manufacturer: manufacturer || null,
-            androidVersion: androidVersion || null,
-            apiLevel: apiLevel || null,
-            imei: imei || null,
-            phoneNumber: phoneNumber || null,
-            fcmToken: fcmToken || null,
-            appVersion: appVersion || null,
-            status: 'online',
+        // Create device
+        const device = await Device.create({
+            id: deviceId,
+            deviceName,
+            model,
+            manufacturer,
+            osVersion,
+            sdkVersion,
+            appVersion,
+            fcmToken,
+            deviceToken,
+            imei,
+            phoneNumber,
+            simSerial,
+            simOperator,
+            networkOperator,
+            macAddress,
+            ipAddress,
+            deviceType,
             lastSeen: new Date(),
-            ipAddress: req.ip
-        };
+            isActive: true,
+            isOnline: true
+        });
 
-        if (device) {
-            // Update existing device
-            logger.info(`[${requestId}] Updating existing device: ${deviceId}`);
-            device = await device.update(deviceData);
-        } else {
-            // Create new device
-            logger.info(`[${requestId}] Registering new device: ${deviceId}`);
-            device = await Device.create(deviceData);
-        }
-
-        // Generate JWT token
-        const token = jwt.sign(
-            { 
-                deviceId: device.deviceId, 
-                deviceUuid: device.id 
+        // Create initial status
+        await DeviceStatus.create({
+            deviceId,
+            batteryLevel: 0,
+            isCharging: false,
+            isLowPowerMode: false,
+            networkType: 'unknown',
+            storage: {
+                total: 0,
+                available: 0,
+                used: 0
             },
-            process.env.JWT_SECRET || 'your-secret-key',
-            { expiresIn: '30d' }
-        );
+            memory: {
+                total: 0,
+                available: 0,
+                used: 0
+            },
+            cpuUsage: 0,
+            lastUpdated: new Date()
+        });
 
-        logger.info(`[${requestId}] Device ${deviceId} registration successful`);
+        logger.info(`New device registered: ${deviceId} (${deviceName})`);
 
-        return res.json({
+        return res.status(201).json({
             success: true,
-            token,
-            device: {
-                id: device.id,
-                deviceId: device.deviceId,
-                name: device.name,
-                nickname: device.nickname,
-                status: device.status,
-                lastSeen: device.lastSeen
+            data: {
+                deviceId,
+                deviceToken
             }
         });
+
     } catch (error) {
-        logger.error(`[${requestId}] Device registration error:`, error);
+        logger.error('Error registering device:', error);
         return res.status(500).json({
             success: false,
-            error: 'Internal server error during device registration',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            error: 'Failed to register device'
         });
     }
 };
 
 /**
- * Update device nickname
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<Object>} Response with updated device data
+ * Get all devices (admin only)
  */
-exports.updateNickname = async (req, res) => {
-    const { deviceId } = req.params;
-    const { nickname } = req.body;
-    const requestId = req.requestId || 'unknown';
-
+exports.getAllDevices = async (req, res) => {
     try {
-        if (!nickname) {
-            return res.status(400).json({
-                success: false,
-                error: 'Nickname is required'
-            });
+        const { page = 1, limit = 10, status } = req.query;
+        const offset = (page - 1) * limit;
+        
+        const whereClause = {};
+        if (status) {
+            whereClause.status = status;
         }
 
-        const device = await Device.findOne({ where: { deviceId } });
-        if (!device) {
-            return res.status(404).json({
-                success: false,
-                error: 'Device not found'
-            });
-        }
-
-        await device.update({ nickname });
-        logger.info(`[${requestId}] Updated nickname for device ${deviceId}`);
+        const { count, rows } = await Device.findAndCountAll({
+            where: whereClause,
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            order: [['lastSeen', 'DESC']]
+        });
 
         return res.json({
             success: true,
-            device: {
-                id: device.id,
-                deviceId: device.deviceId,
-                nickname: device.nickname
+            data: rows,
+            pagination: {
+                total: count,
+                page: parseInt(page),
+                totalPages: Math.ceil(count / limit)
             }
         });
     } catch (error) {
-        logger.error(`[${requestId}] Error updating device nickname:`, error);
+        logger.error('Error fetching devices:', error);
         return res.status(500).json({
             success: false,
-            error: 'Failed to update device nickname'
+            error: 'Failed to fetch devices'
         });
     }
 };
 
 /**
- * Get device details
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<Object>} Response with device data
+ * Get device by ID
  */
 exports.getDevice = async (req, res) => {
-    const { deviceId } = req.params;
-    const requestId = req.requestId || 'unknown';
-
     try {
-        const device = await Device.findOne({ 
-            where: { deviceId },
-            attributes: { exclude: ['createdAt', 'updatedAt'] }
+        const { deviceId } = req.params;
+        const device = await Device.findByPk(deviceId);
+
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                error: 'Device not found'
+            });
+        }
+
+        // Check if user has permission to access this device
+        if (req.user.role !== 'admin' && req.user.deviceId !== deviceId) {
+            return res.status(403).json({
+                success: false,
+                error: 'Not authorized to access this device'
+            });
+        }
+
+        return res.json({
+            success: true,
+            data: device
+        });
+    } catch (error) {
+        logger.error('Error fetching device:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch device'
+        });
+    }
+};
+
+/**
+ * Update device information
+ */
+exports.updateDevice = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const updates = req.body;
+
+        const device = await Device.findByPk(deviceId);
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                error: 'Device not found'
+            });
+        }
+
+        // Check permissions
+        if (req.user.role !== 'admin' && req.user.deviceId !== deviceId) {
+            return res.status(403).json({
+                success: false,
+                error: 'Not authorized to update this device'
+            });
+        }
+
+        // Update device
+        await device.update(updates);
+
+        return res.json({
+            success: true,
+            data: device
+        });
+    } catch (error) {
+        logger.error('Error updating device:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to update device'
+        });
+    }
+};
+
+/**
+ * Delete a device (admin only)
+ */
+exports.deleteDevice = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        const device = await Device.findByPk(deviceId);
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                error: 'Device not found'
+            });
+        }
+
+        // Soft delete the device
+        await device.destroy();
+
+        return res.json({
+            success: true,
+            message: 'Device deleted successfully'
+        });
+    } catch (error) {
+        logger.error('Error deleting device:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to delete device'
+        });
+    }
+};
+
+/**
+ * Get device status
+ */
+exports.getDeviceStatus = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        const device = await Device.findByPk(deviceId, {
+            attributes: ['id', 'status', 'lastSeen', 'batteryLevel', 'storage', 'network']
         });
 
         if (!device) {
@@ -169,32 +259,42 @@ exports.getDevice = async (req, res) => {
             });
         }
 
-        logger.debug(`[${requestId}] Retrieved device: ${deviceId}`);
+        // Check permissions
+        if (req.user.role !== 'admin' && req.user.deviceId !== deviceId) {
+            return res.status(403).json({
+                success: false,
+                error: 'Not authorized to access this device status'
+            });
+        }
+
         return res.json({
             success: true,
-            device
+            data: {
+                status: device.status,
+                lastSeen: device.lastSeen,
+                batteryLevel: device.batteryLevel,
+                storage: device.storage,
+                network: device.network
+            }
         });
     } catch (error) {
-        logger.error(`[${requestId}] Error fetching device ${deviceId}:`, error);
+        logger.error('Error fetching device status:', error);
         return res.status(500).json({
             success: false,
-            error: 'Failed to fetch device details'
+            error: 'Failed to fetch device status'
         });
     }
 };
 
 /**
  * Handle device heartbeat
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<Object>} Response with updated device status
  */
 exports.handleHeartbeat = async (req, res) => {
-    const { deviceId } = req.device;
-    const requestId = req.requestId || 'unknown';
-    
     try {
-        const device = await Device.findOne({ where: { deviceId } });
+        const { deviceId } = req.params;
+        const { batteryLevel, storage, network } = req.body;
+
+        const device = await Device.findByPk(deviceId);
         if (!device) {
             return res.status(404).json({
                 success: false,
@@ -202,24 +302,74 @@ exports.handleHeartbeat = async (req, res) => {
             });
         }
 
-        // Update last seen timestamp and set status to online
+        // Update device status
         await device.update({
             lastSeen: new Date(),
-            status: 'online',
-            ipAddress: req.ip
+            batteryLevel,
+            storage,
+            network,
+            status: 'active'
         });
 
-        logger.debug(`[${requestId}] Device heartbeat received: ${deviceId}`);
-        
+        // Check for pending commands
+        const pendingCommands = await Command.findAll({
+            where: {
+                deviceId,
+                status: 'pending',
+                scheduledAt: { [Op.lte]: new Date() }
+            },
+            order: [['createdAt', 'ASC']],
+            limit: 1
+        });
+
         return res.json({
             success: true,
-            timestamp: new Date().toISOString()
+            commands: pendingCommands
         });
     } catch (error) {
-        logger.error(`[${requestId}] Error processing heartbeat for device ${deviceId}:`, error);
+        logger.error('Error processing heartbeat:', error);
         return res.status(500).json({
             success: false,
             error: 'Failed to process heartbeat'
+        });
+    }
+};
+
+/**
+ * Get device statistics
+ */
+exports.getDeviceStatistics = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        // Check permissions
+        if (req.user.role !== 'admin' && req.user.deviceId !== deviceId) {
+            return res.status(403).json({
+                success: false,
+                error: 'Not authorized to access device statistics'
+            });
+        }
+
+        // Get basic statistics (you can expand this with more metrics)
+        const stats = {
+            commands: {
+                total: await Command.count({ where: { deviceId } }),
+                pending: await Command.count({ where: { deviceId, status: 'pending' } }),
+                completed: await Command.count({ where: { deviceId, status: 'completed' } }),
+                failed: await Command.count({ where: { deviceId, status: 'failed' } })
+            },
+            lastSeen: (await Device.findByPk(deviceId, { attributes: ['lastSeen'] }))?.lastSeen
+        };
+
+        return res.json({
+            success: true,
+            data: stats
+        });
+    } catch (error) {
+        logger.error('Error fetching device statistics:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch device statistics'
         });
     }
 };

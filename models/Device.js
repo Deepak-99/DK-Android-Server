@@ -1,6 +1,6 @@
 const { DataTypes } = require('sequelize');
 
-module.exports = (sequelize) => {
+module.exports = (sequelize, DataTypes) => {
   const Device = sequelize.define('Device', {
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
@@ -80,6 +80,21 @@ module.exports = (sequelize) => {
 
     // other associations remain unchanged...
   };
+
+    Device.hasMany(models.CallRecording, {
+        foreignKey: 'deviceId',
+        as: 'callRecordings'
+    });
+
+    Device.hasMany(models.ScreenRecording, {
+        foreignKey: 'deviceId',
+        as: 'screenRecordings'
+    });
+
+    Device.hasMany(models.Screenshot, {
+        foreignKey: 'deviceId',
+        as: 'screenshots'
+    });
 
   return Device;
 };
