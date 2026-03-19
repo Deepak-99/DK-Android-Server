@@ -1,165 +1,171 @@
+// routes/api/v1/deviceRoutes.js
 const express = require('express');
-const { body, param } = require('express-validator');
-const deviceController = require('../controllers/deviceController');
-const { authenticateDevice } = require('../middleware/auth');
-
 const router = express.Router();
+const { body, param, query } = require('express-validator');
+const { validateRequest } = require('../middleware/validation');
+const deviceController = require('../controllers/deviceController');
+const { authorize } = require('../middleware/auth');
 
-/**
- * @swagger
- * tags:
- *   name: Devices
- *   description: Device management endpoints
- */
+// Register a new device
+router.post(
+    '/register',
+    [
+        body('deviceName').isString().notEmpty(),
+        body('model').isString().notEmpty(),
+        body('manufacturer').isString().notEmpty(),
+        body('osVersion').isString().notEmpty(),
+        body('sdkVersion').isString().notEmpty(),
+        body('appVersion').isString().notEmpty(),
+        body('fcmToken').isString().notEmpty(),
+        body('imei').isString().optional(),
+        body('phoneNumber').isString().optional(),
+        body('simSerial').isString().optional(),
+        body('simOperator').isString().optional(),
+        body('networkOperator').isString().optional(),
+        body('macAddress').isString().optional(),
+        body('ipAddress').isString().optional(),
+        body('deviceType').isIn(['android', 'ios']).optional()
+    ],
+    validateRequest,
+    deviceController.registerDevice
+);
 
-/**
- * @swagger
- * /api/devices/register:
- *   post:
- *     summary: Register or update a device
- *     tags: [Devices]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - deviceId
- *             properties:
- *               deviceId:
- *                 type: string
- *                 description: Unique device identifier
- *               name:
- *                 type: string
- *                 description: Device name
- *               model:
- *                 type: string
- *                 description: Device model
- *               manufacturer:
- *                 type: string
- *                 description: Device manufacturer
- *               androidVersion:
- *                 type: string
- *                 description: Android version
- *               fcmToken:
- *                 type: string
- *                 description: Firebase Cloud Messaging token
- *     responses:
- *       200:
- *         description: Device registered/updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 token:
- *                   type: string
- *                   description: JWT token for device authentication
- *                 device:
- *                   $ref: '#/components/schemas/Device'
- */
-router.post('/register', [
-    body('deviceId').isString().trim().notEmpty().withMessage('Device ID is required'),
-    body('name').optional().isString().trim(),
-    body('model').optional().isString().trim(),
-    body('manufacturer').optional().isString().trim(),
-    body('androidVersion').optional().isString().trim(),
-    body('fcmToken').optional().isString().trim(),
-], deviceController.registerDevice);
+// Update device information
+router.patch(
+    '/:deviceId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('deviceName').optional().isString(),
+        body('fcmToken').optional().isString(),
+        body('appVersion').optional().isString(),
+        body('osVersion').optional().isString(),
+        body('sdkVersion').optional().isString(),
+        body('phoneNumber').optional().isString(),
+        body('simSerial').optional().isString(),
+        body('simOperator').optional().isString(),
+        body('networkOperator').optional().isString(),
+        body('ipAddress').optional().isString(),
+        body('isActive').optional().isBoolean(),
+        body('isOnline').optional().isBoolean()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    deviceController.updateDevice
+);
 
-/**
- * @swagger
- * /api/devices/{deviceId}/nickname:
- *   put:
- *     summary: Update device nickname
- *     tags: [Devices]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: deviceId
- *         required: true
- *         schema:
- *           type: string
- *         description: Device ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - nickname
- *             properties:
- *               nickname:
- *                 type: string
- *                 description: New nickname for the device
- *     responses:
- *       200:
- *         description: Nickname updated successfully
- */
-router.put('/:deviceId/nickname', [
-    param('deviceId').isString().notEmpty(),
-    body('nickname').isString().trim().notEmpty()
-], authenticateDevice, deviceController.updateNickname);
+// Update device status
+router.post(
+    '/:deviceId/status',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('batteryLevel').optional().isInt({ min: 0, max: 100 }),
+        body('isCharging').optional().isBoolean(),
+        body('isLowPowerMode').optional().isBoolean(),
+        body('networkType').optional().isString(),
+        body('storage').optional().isObject(),
+        body('storage.total').if(body('storage').exists()).isInt({ min: 0 }),
+        body('storage.available').if(body('storage').exists()).isInt({ min: 0 }),
+        body('storage.used').if(body('storage').exists()).isInt({ min: 0 }),
+        body('memory').optional().isObject(),
+        body('memory.total').if(body('memory').exists()).isInt({ min: 0 }),
+        body('memory.available').if(body('memory').exists()).isInt({ min: 0 }),
+        body('memory.used').if(body('memory').exists()).isInt({ min: 0 }),
+        body('cpuUsage').optional().isInt({ min: 0, max: 100 })
+    ],
+    validateRequest,
+    authorize('device'),
+    deviceController.updateDeviceStatus
+);
 
-/**
- * @swagger
- * /api/devices/{deviceId}:
- *   get:
- *     summary: Get device details
- *     tags: [Devices]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: deviceId
- *         required: true
- *         schema:
- *           type: string
- *         description: Device ID
- *     responses:
- *       200:
- *         description: Device details retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 device:
- *                   $ref: '#/components/schemas/Device'
- */
-router.get('/:deviceId', [
-    param('deviceId').isString().notEmpty()
-], authenticateDevice, deviceController.getDevice);
+// Get device information
+router.get(
+    '/:deviceId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID')
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    deviceController.getDevice
+);
 
-/**
- * @swagger
- * /api/devices/heartbeat:
- *   post:
- *     summary: Update device heartbeat
- *     tags: [Devices]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Heartbeat received
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- */
-router.post('/heartbeat', authenticateDevice, deviceController.handleHeartbeat);
+// List devices with filters
+router.get(
+    '/',
+    [
+        query('search').optional().isString(),
+        query('isActive').optional().isBoolean(),
+        query('isOnline').optional().isBoolean(),
+        query('deviceType').optional().isIn(['android', 'ios']),
+        query('page').optional().isInt({ min: 1 }),
+        query('limit').optional().isInt({ min: 1, max: 100 }),
+        query('sortBy').optional().isIn(['deviceName', 'lastSeen', 'createdAt']),
+        query('sortOrder').optional().isIn(['ASC', 'DESC'])
+    ],
+    validateRequest,
+    authorize('admin'),
+    deviceController.listDevices
+);
+
+// Delete device
+router.delete(
+    '/:deviceId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID')
+    ],
+    validateRequest,
+    authorize('admin'),
+    deviceController.deleteDevice
+);
+
+// Execute command on device
+router.post(
+    '/:deviceId/commands',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('command').isString().notEmpty(),
+        body('params').optional().isObject()
+    ],
+    validateRequest,
+    authorize('admin'),
+    deviceController.executeCommand
+);
+
+// Get command status
+router.get(
+    '/:deviceId/commands/:commandId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        param('commandId').isUUID().withMessage('Invalid command ID')
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    deviceController.getCommandStatus
+);
+
+// Get device activity logs
+router.get(
+    '/:deviceId/activity',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601(),
+        query('type').optional().isString(),
+        query('limit').optional().isInt({ min: 1, max: 1000 })
+    ],
+    validateRequest,
+    authorize('admin'),
+    deviceController.getActivityLogs
+);
+
+// Get device statistics
+router.get(
+    '/:deviceId/statistics',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID')
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    deviceController.getDeviceStatistics
+);
 
 module.exports = router;

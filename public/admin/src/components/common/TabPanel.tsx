@@ -1,15 +1,18 @@
-import React from 'react';
+import { FC, ReactNode } from 'react';
 import { Box, Typography } from '@mui/material';
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  children?: ReactNode;
   index: number;
   value: number;
 }
 
-export const TabPanel: React.FC<TabPanelProps> = (props) => {
-  const { children, value, index, ...other } = props;
-
+export const TabPanel: FC<TabPanelProps> = ({
+  children,
+  value,
+  index,
+  ...other
+}) => {
   return (
     <div
       role="tabpanel"
@@ -20,7 +23,9 @@ export const TabPanel: React.FC<TabPanelProps> = (props) => {
     >
       {value === index && (
         <Box sx={{ p: 3 }}>
-          <Typography component="div">{children}</Typography>
+          <Typography component="div">
+            {children}
+          </Typography>
         </Box>
       )}
     </div>

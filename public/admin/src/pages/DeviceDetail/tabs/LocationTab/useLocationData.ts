@@ -1,41 +1,84 @@
 import { useEffect, useState } from "react";
-import { deviceLocationApi } from "@/services/deviceLocationApi";
-import { ws } from "@/services/ws";
+import { deviceLocationApi } from "../../../../services/deviceLocationApi";
+import { subscribe } from "../../../../services/websocket";
+
+interface LocationPayload {
+  deviceId: string;
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  timestamp?: string;
+}
 
 export function useLocationData(deviceId: string) {
-    const [latest, setLatest] = useState<any>(null);
-    const [history, setHistory] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+  const [latest, setLatest] = useState<LocationPayload | null>(null);
+  const [history, setHistory] = useState<LocationPayload[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        async function load() {
-            setLoading(true);
-            const [latestRes, historyRes] = await Promise.all([
-                deviceLocationApi.latest(deviceId),
-                deviceLocationApi.history(deviceId, 200)
-            ]);
-            setLatest(latestRes.data);
-            setHistory(historyRes.data || []);
-            setLoading(false);
+  // ---------------------------
+  // Initial REST load
+  // ---------------------------
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        setLoading(true);
+
+        const [latestRes, historyRes] = await Promise.all([
+          deviceLocationApi.latest(deviceId),
+          deviceLocationApi.history(deviceId, 200),
+        ]);
+
+        if (!mounted) return;
+
+        setLatest(latestRes.data || null);
+        setHistory(historyRes.data || []);
+      } catch (err) {
+        console.error("Location load failed", err);
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
-        load();
-    }, [deviceId]);
+      }
+    }
 
-    // 🔥 Live WebSocket location updates
-    useEffect(() => {
-        ws.join(`device:${deviceId}`);
+    if (deviceId) {
+      load();
+    }
 
-        const unsub = ws.subscribe("location_update", (payload) => {
-            if (payload.deviceId !== deviceId) return;
-            setLatest(payload);
-            setHistory((prev) => [...prev, payload]);
-        });
+    return () => {
+      mounted = false;
+    };
+  }, [deviceId]);
 
-        return () => {
-            unsub();
-            ws.leave(`device:${deviceId}`);
-        };
-    }, [deviceId]);
+  // ---------------------------
+  // Live WebSocket updates
+  // ---------------------------
 
-    return { latest, history, loading };
+  useEffect(() => {
+    if (!deviceId) return;
+
+    const unsubscribe = subscribe((event) => {
+      if (event?.type !== "location_update") return;
+
+      const payload = event.payload as LocationPayload;
+
+      if (!payload || payload.deviceId !== deviceId) return;
+
+      setLatest(payload);
+      setHistory((prev) => [payload, ...prev]);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [deviceId]);
+
+  return {
+    latest,
+    history,
+    loading,
+  };
 }

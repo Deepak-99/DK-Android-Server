@@ -137,50 +137,7 @@ module.exports = (sequelize) => {
   }, {
       tableName: 'media_files',
       underscored: false,
-      hooks: {
-        afterSync: async (options) => {
-          const queryInterface = options.sequelize.getQueryInterface();
-          const transaction = await options.sequelize.transaction();
-          
-          try {
-            // Check if the constraint already exists
-            const [results] = await queryInterface.sequelize.query(
-              `SELECT * FROM information_schema.table_constraints 
-               WHERE constraint_schema = DATABASE() 
-               AND table_name = 'media_files' 
-               AND constraint_name = 'media_files_deviceId_fk'`,
-              { transaction }
-            );
-            
-            // Only add the constraint if it doesn't exist
-            if (results.length === 0) {
-              // Drop any existing foreign key constraints if they exist
-              await queryInterface.removeConstraint('media_files', 'media_files_ibfk_1', { transaction }).catch(() => {});
-              await queryInterface.removeConstraint('media_files', 'media_files_ibfk_2', { transaction }).catch(() => {});
-              
-              // Add the correct foreign key constraint
-              await queryInterface.addConstraint('media_files', {
-                fields: ['deviceId'],
-                type: 'foreign key',
-                name: 'media_files_deviceId_fk',
-                references: {
-                  table: 'devices',
-                  field: 'deviceId'
-                },
-                onDelete: 'CASCADE',
-                onUpdate: 'CASCADE',
-                transaction
-              });
-            }
-            
-            await transaction.commit();
-          } catch (error) {
-            await transaction.rollback();
-            console.error('Error setting up media_files foreign keys:', error);
-            throw error; // Re-throw to prevent silent failures
-          }
-        }
-      },
+
       indexes: [
           {
               fields: ['deviceId']
@@ -204,63 +161,6 @@ module.exports = (sequelize) => {
       targetKey: 'deviceId',
       as: 'device'
     });
-  };
-
-  // Add syncWithDatabase method to handle foreign key constraints
-  MediaFile.syncWithDatabase = async (options = {}) => {
-    const queryInterface = sequelize.getQueryInterface();
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Drop existing foreign key constraints if they exist
-      await queryInterface.removeConstraint('media_files', 'media_files_ibfk_1', { transaction }).catch(() => {});
-      await queryInterface.removeConstraint('media_files', 'media_files_ibfk_2', { transaction }).catch(() => {});
-      
-      // Sync the model without applying indexes first
-      await MediaFile.sync({ ...options, transaction, indexes: [] });
-      
-      // Add the correct foreign key constraint for deviceId
-      await queryInterface.addConstraint('media_files', {
-        fields: ['deviceId'],
-        type: 'foreign key',
-        name: 'media_files_deviceId_fk',
-        references: { 
-          table: 'devices', 
-          field: 'deviceId'
-        },
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
-        transaction
-      });
-      
-      // Add necessary indexes
-      const existingIndexes = await queryInterface.showIndex('media_files', { transaction });
-      const hasMediaTypeIndex = existingIndexes.some(idx => idx.name === 'media_files_media_type');
-      const hasCreatedAtIndex = existingIndexes.some(idx => idx.name === 'media_files_created_at');
-      
-      if (!hasMediaTypeIndex) {
-        await queryInterface.addIndex('media_files', {
-          name: 'media_files_media_type',
-          fields: ['media_type'],
-          transaction
-        });
-      }
-      
-      if (!hasCreatedAtIndex) {
-        await queryInterface.addIndex('media_files', {
-          name: 'media_files_created_at',
-          fields: ['created_at'],
-          transaction
-        });
-      }
-      
-      await transaction.commit();
-      return true;
-    } catch (error) {
-      await transaction.rollback();
-      console.error('Error syncing MediaFile model:', error);
-      return false;
-    }
   };
 
   return MediaFile;

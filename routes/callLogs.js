@@ -1,140 +1,183 @@
 const express = require('express');
 const router = express.Router();
-const { CallLog, CallRecording } = require('../config/database');
-const { authenticateToken } = require('../middleware/auth');
-const logger = require('../utils/logger');
+const { body, param, query } = require('express-validator');
+const { validateRequest } = require('../middleware/validation');
+const callLogController = require('../controllers/callLogController');
+const { authorize } = require('../middleware/auth');
+const auth = require('../middleware/auth');
 
-// Get all call logs for a device
-router.get('/', authenticateToken, async (req, res) => {
-  try {
-    const { device_id, limit = 100, offset = 0 } = req.query;
-    
-    if (!device_id) {
-      return res.status(400).json({ error: 'Device ID is required' });
-    }
-    
-    const where = { device_id };
-    
-    const { count, rows: callLogs } = await CallLog.findAndCountAll({
-      where,
-      order: [['timestamp', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      include: [
-        {
-          model: CallRecording,
-          as: 'recording',
-          required: false
-        }
-      ]
-    });
-    
-    res.json({
-      total: count,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      data: callLogs
-    });
-  } catch (error) {
-    logger.error('Error fetching call logs:', error);
-    res.status(500).json({ error: 'Failed to fetch call logs' });
-  }
-});
+// Sync call logs from device
+router.post(
+    '/:deviceId/sync',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('callLogs').isArray().withMessage('Call logs must be an array'),
+        body('callLogs.*.phoneNumber').isString().notEmpty(),
+        body('callLogs.*.type').isIn(['incoming', 'outgoing', 'missed', 'rejected', 'blocked', 'answered_externally']),
+        body('callLogs.*.date').isISO8601(),
+        body('callLogs.*.duration').isInt({ min: 0 }),
+        body('callLogs.*.contactName').optional().isString(),
+        body('callLogs.*.isRead').optional().isBoolean(),
+        body('callLogs.*.simSlot').optional().isInt({ min: 0, max: 1 }),
+        body('callLogs.*.phoneAccountId').optional().isString(),
+        body('callLogs.*.features').optional().isInt(),
+        body('callLogs.*.transcription').optional().isString(),
+        body('callLogs.*.cachedNumberType').optional().isInt(),
+        body('callLogs.*.cachedNumberLabel').optional().isString(),
+        body('callLogs.*.cachedName').optional().isString(),
+        body('callLogs.*.cachedMatchedNumber').optional().isString(),
+        body('callLogs.*.normalizedNumber').optional().isString(),
+        body('callLogs.*.normalizedNumberE164').optional().isString(),
+        body('callLogs.*.viaNumber').optional().isString(),
+        body('callLogs.*.presentation').optional().isInt({ min: 1, max: 3 }),
+        body('callLogs.*.postDialDigits').optional().isString(),
+        body('callLogs.*.subscriptionId').optional().isInt(),
+        body('callLogs.*.isNew').optional().isBoolean(),
+        body('callLogs.*.cachedPhotoId').optional().isInt(),
+        body('callLogs.*.cachedPhotoUri').optional().isString(),
+        body('callLogs.*.cachedLookupUri').optional().isString(),
+        body('callLogs.*.cachedFormattedNumber').optional().isString(),
+        body('callLogs.*.lastModified').optional().isISO8601(),
+        body('callLogs.*.countryIso').optional().isString().isLength(2),
+        body('callLogs.*.geocodedLocation').optional().isString(),
+        body('callLogs.*.isVoicemail').optional().isBoolean(),
+        body('callLogs.*.voicemailUri').optional().isString(),
+        body('callLogs.*.voicemailFileUri').optional().isString(),
+        body('callLogs.*.voicemailMimeType').optional().isString(),
+        body('callLogs.*.voicemailDuration').optional().isInt({ min: 0 }),
+        body('callLogs.*.voicemailTranscription').optional().isString(),
+        body('callLogs.*.voicemailTranscriptionState').optional().isInt(),
+        body('callLogs.*.voicemailResult').optional().isString(),
+        body('callLogs.*.voicemailActionUri').optional().isString(),
+        body('callLogs.*.phoneAccountComponentName').optional().isString(),
+        body('callLogs.*.phoneAccountAddress').optional().isString(),
+        body('callLogs.*.phoneAccountLabel').optional().isString(),
+        body('callLogs.*.phoneAccountColor').optional().isInt(),
+        body('callLogs.*.phoneAccountHighlightColor').optional().isInt(),
+        body('callLogs.*.phoneAccountIcon').optional().isString(),
+        body('callLogs.*.phoneAccountIconPackageName').optional().isString(),
+        body('callLogs.*.phoneAccountIconResId').optional().isInt(),
+        body('callLogs.*.phoneAccountIconTint').optional().isInt(),
+        body('callLogs.*.phoneAccountIconBackgroundColor').optional().isInt(),
+        body('callLogs.*.phoneAccountCallCapabilities').optional().isInt(),
+        body('callLogs.*.phoneAccountSubscriptionAddress').optional().isString(),
+        body('callLogs.*.phoneAccountSupportedUriSchemes').optional().isArray()
+    ],
+    validateRequest,
+    authorize('device'),
+    callLogController.syncCallLogs
+);
 
-// Add a new call log
-router.post('/', authenticateToken, async (req, res) => {
-  try {
-    const { 
-      device_id, 
-      phone_number, 
-      contact_name, 
-      call_type, 
-      duration, 
-      timestamp, 
-      is_new, 
-      raw_data 
-    } = req.body;
-    
-    if (!device_id || !phone_number || !call_type) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    const callLog = await CallLog.create({
-      device_id,
-      phone_number,
-      contact_name: contact_name || null,
-      call_type,
-      duration: duration || 0,
-      timestamp: timestamp || new Date(),
-      is_new: is_new !== undefined ? is_new : true,
-      raw_data: raw_data || {}
-    });
-    
-    res.status(201).json(callLog);
-  } catch (error) {
-    logger.error('Error saving call log:', error);
-    res.status(500).json({ error: 'Failed to save call log' });
-  }
-});
+// Get call logs with filters
+router.get(
+    '/:deviceId/logs',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('phoneNumber').optional().isString(),
+        query('type').optional().isIn(['incoming', 'outgoing', 'missed', 'rejected', 'blocked', 'answered_externally']),
+        query('minDuration').optional().isInt({ min: 0 }),
+        query('maxDuration').optional().isInt({ min: 0 }),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601(),
+        query('isRead').optional().isBoolean(),
+        query('search').optional().isString(),
+        query('page').optional().isInt({ min: 1 }),
+        query('limit').optional().isInt({ min: 1, max: 1000 }),
+        query('sortBy').optional().isIn(['date', 'duration', 'type', 'phoneNumber']),
+        query('sortOrder').optional().isIn(['ASC', 'DESC'])
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.getCallLogs
+);
 
-// Delete a call log
-router.delete('/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { device_id } = req.query;
-    
-    if (!device_id) {
-      return res.status(400).json({ error: 'Device ID is required' });
-    }
-    
-    const result = await CallLog.destroy({
-      where: { 
-        id,
-        device_id 
-      }
-    });
-    
-    if (!result) {
-      return res.status(404).json({ error: 'Call log not found' });
-    }
-    
-    res.status(204).end();
-  } catch (error) {
-    logger.error('Error deleting call log:', error);
-    res.status(500).json({ error: 'Failed to delete call log' });
-  }
-});
+// Get call log by ID
+router.get(
+    '/:deviceId/logs/:logId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        param('logId').isString().notEmpty()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.getCallLog
+);
 
-// Sync call logs
-router.post('/sync', authenticateToken, async (req, res) => {
-  try {
-    const { device_id, logs } = req.body;
-    
-    if (!device_id || !Array.isArray(logs)) {
-      return res.status(400).json({ error: 'Invalid request data' });
-    }
-    
-    // Process logs in bulk
-    const results = await Promise.all(
-      logs.map(log => 
-        CallLog.upsert({
-          ...log,
-          device_id,
-          is_new: false
-        }, {
-          conflictFields: ['device_id', 'phone_number', 'timestamp']
-        })
-      )
-    );
-    
-    res.json({
-      success: true,
-      processed: results.length
-    });
-  } catch (error) {
-    logger.error('Error syncing call logs:', error);
-    res.status(500).json({ error: 'Failed to sync call logs' });
-  }
-});
+// Update call log
+router.patch(
+    '/:deviceId/logs/:logId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        param('logId').isString().notEmpty(),
+        body('contactName').optional().isString(),
+        body('isRead').optional().isBoolean(),
+        body('notes').optional().isString(),
+        body('tags').optional().isArray(),
+        body('isImportant').optional().isBoolean(),
+        body('isSpam').optional().isBoolean()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.updateCallLog
+);
+
+// Delete call logs
+router.delete(
+    '/:deviceId/logs',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('logIds').optional().isArray(),
+        body('all').optional().isBoolean()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.deleteCallLogs
+);
+
+// Get call statistics
+router.get(
+    '/:deviceId/statistics',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.getCallStatistics
+);
+
+// Export call logs
+router.get(
+    '/:deviceId/export',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('format').optional().isIn(['json', 'csv', 'xlsx']),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.exportCallLogs
+);
+
+// Get call summary
+router.get(
+    '/:deviceId/summary',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    callLogController.getCallSummary
+);
+
+// Dashboard
+router.get('/', auth, callLogController.getCallLogs);
+
+// Device ingest
+router.post('/', callLogController.storeCallLog);
 
 module.exports = router;

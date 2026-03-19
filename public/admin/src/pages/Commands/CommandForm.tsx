@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { commandApi } from "./commandApi";
+import { commandApi } from "../../services/commandApi";
 
 export default function CommandForm({ deviceId, onSent }: any) {
   const [type, setType] = useState("TAKE_SCREENSHOT");

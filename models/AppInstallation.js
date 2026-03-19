@@ -91,54 +91,5 @@ module.exports = (sequelize) => {
     }
   };
   
-  // Add a class method to sync the model with the database
-  AppInstallation.syncWithDatabase = async (options = {}) => {
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Skip foreign key checks to prevent issues with missing tables
-      await sequelize.query('SET FOREIGN_KEY_CHECKS = 0', { transaction });
-      
-      // Sync the model with the database
-      await AppInstallation.sync({
-        ...options,
-        transaction,
-        // Only add indexes if they don't exist
-        alter: process.env.NODE_ENV !== 'production' ? {
-          drop: false,  // Don't drop columns
-          add: true,    // Add new columns
-          remove: false // Don't remove columns
-        } : false
-      });
-      
-      // Create indexes manually to ensure they're not duplicated
-      const queryInterface = sequelize.getQueryInterface();
-      const indexes = await queryInterface.showIndex('app_installations');
-      
-      // Check if our unique index exists
-      const hasUniqueIndex = indexes.some(
-        index => index.name === 'uniq_device_app_update' && index.unique
-      );
-      
-      if (!hasUniqueIndex) {
-        await queryInterface.addIndex('app_installations', ['device_id', 'app_update_id'], {
-          name: 'uniq_device_app_update',
-          unique: true,
-          transaction
-        });
-      }
-      
-      // Re-enable foreign key checks
-      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1', { transaction });
-      
-      await transaction.commit();
-      return true;
-    } catch (error) {
-      await transaction.rollback();
-      console.error('Error syncing AppInstallation model:', error);
-      return false;
-    }
-  };
-
   return AppInstallation;
 };

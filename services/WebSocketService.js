@@ -96,6 +96,21 @@ class WebSocketService {
         socket.on("command-response", async (response) => {
             await this.handleCommandResponse(response);
         });
+
+        socket.on('command-executing', async ({ commandId }) => {
+            if (!commandId) return;
+
+            await Command.update(
+                { status: 'executing' },
+                { where: { id: commandId } }
+            );
+
+            this.broadcastAdmin({
+                type: 'command_executing',
+                payload: { commandId, ts: Date.now() }
+            });
+        });
+
     }
 
     /* -----------------------------------------------------------
@@ -178,12 +193,46 @@ class WebSocketService {
 
             this.commandPromises.set(commandId, { resolve, reject, timer });
 
-            socket.emit("command", {
-                commandId,
-                type: command.type,
-                data: command.data || {},
-                timestamp: new Date().toISOString()
-            });
+            socket.emit(
+                "command",
+                {
+                    commandId,
+                    type: command.type,
+                    data: command.data || {},
+                    timestamp: new Date().toISOString()
+                },
+                async (deliveryAck) => {
+                    if (!deliveryAck || deliveryAck.status !== 'received') {
+                        logger.error(`❌ Command not acknowledged by device`, { commandId });
+
+                        await Command.update(
+                            { status: 'failed', error: 'DELIVERY_FAILED' },
+                            { where: { id: commandId } }
+                        );
+
+                        const entry = this.commandPromises.get(commandId);
+                        if (entry) {
+                            clearTimeout(entry.timer);
+                            entry.reject(new Error('Command delivery failed'));
+                            this.commandPromises.delete(commandId);
+                        }
+
+                        return;
+                    }
+
+                    // ✅ DELIVERY CONFIRMED
+                    await Command.update(
+                        { status: 'sent' },
+                        { where: { id: commandId } }
+                    );
+
+                    this.broadcastAdmin({
+                        type: 'command_delivered',
+                        payload: { commandId, ts: Date.now() }
+                    });
+                }
+            );
+
 
             console.log(`📤 WS command sent → ${deviceId}`, { commandId });
         });
@@ -205,6 +254,12 @@ class WebSocketService {
      * ---------------------------------------------------------*/
     async handleCommandResponse(response) {
         if (!response || !response.commandId) return;
+
+        const existing = await Command.findByPk(response.commandId);
+        if (!existing || existing.status === 'completed') {
+            return; // 🔥 prevent double resolve
+        }
+
 
         const { commandId } = response;
 
@@ -242,6 +297,8 @@ class WebSocketService {
         }
         this.deviceSockets.clear();
     }
+
+    
 }
 
 module.exports = WebSocketService;

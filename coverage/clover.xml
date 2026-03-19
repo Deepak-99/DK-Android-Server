@@ -379,7 +379,7 @@
         <line num="292" count="0" type="stmt"/>
         <line num="299" count="0" type="stmt"/>
       </file>
-      <file name="appUpdate.v2.js" path="C:\Android_Server_Project\DK-Hawkshaw\routes\appUpdate.v2.js">
+      <file name="appUpdate.js" path="C:\Android_Server_Project\DK-Hawkshaw\routes\appUpdate.js">
         <metrics statements="167" coveredstatements="0" conditionals="112" coveredconditionals="0" methods="17" coveredmethods="0"/>
         <line num="1" count="0" type="stmt"/>
         <line num="2" count="0" type="stmt"/>

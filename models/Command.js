@@ -103,48 +103,6 @@ module.exports = (sequelize) => {
   });
 
   // association is set from Device model (Device.hasMany(Command,...))
-  // add safe sync helper to ensure DB FK exists
-  Command.syncWithDatabase = async function(options = {}) {
-    const queryInterface = this.sequelize.getQueryInterface();
-    try {
-      // Sync model (create table if needed)
-      await this.sync(options);
-
-      // Ensure updated_at exists (tolerant)
-      const [cols] = await queryInterface.sequelize.query(
-        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'commands'`
-      );
-
-      const colNames = cols.map(c => c.COLUMN_NAME);
-      if (!colNames.includes('updated_at')) {
-        // add updated_at column if missing
-        await queryInterface.addColumn('commands', 'updated_at', { type: DataTypes.DATE, allowNull: true });
-      }
-
-      // Add FK constraint referencing devices.deviceId
-      // remove if present then add with standardized name
-      const fkName = 'commands_deviceId_fkey';
-      try { await queryInterface.removeConstraint('commands', fkName); } catch (_) {}
-      try {
-        await queryInterface.addConstraint('commands', {
-          fields: ['deviceId'],
-          type: 'foreign key',
-          name: fkName,
-          references: { table: 'devices', field: 'deviceId' },
-          onDelete: 'CASCADE',
-          onUpdate: 'CASCADE'
-        });
-      } catch (err) {
-        // If addConstraint fails, just log and continue (many dev setups won't need the FK)
-        console.warn('Could not create FK commands->devices (non-fatal):', err.message || err);
-      }
-
-      return true;
-    } catch (err) {
-      console.error('Error in Command.syncWithDatabase:', err);
-      return false;
-    }
-  };
 
   return Command;
 };

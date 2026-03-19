@@ -1,26 +1,69 @@
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Box, Tabs, Tab, Paper, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
-import { getDeviceById } from '../../../services/devices';
-import CallRecordings from './features/CallRecordings';
-import Commands from './features/Commands';
-import DeviceInfo from './features/DeviceInfo';
-// Import other feature components...
+import { useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import { Box, Tabs, Tab, Paper, Typography } from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
+import { getDeviceById, Device } from "../../../services/devices";
+
+import DeviceInfo from "./features/DeviceInfo";
+import CallRecordings from "./features/CallRecordings";
+import Commands from "./features/Commands";
+import ScreenProjections from "./features/ScreenProjections";
+import LocationPage from "../../../pages/Location/LocationPage";
+import ScreenRecordingsPage from "../../../pages/screen-recordings/ScreenRecordingsPage";
 
 const DeviceDetails = () => {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState(0);
 
-  const { data: device, isLoading } = useQuery(
-    ['device', id],
-    () => getDeviceById(id!),
-    { enabled: !!id }
-  );
+  /* ✅ React Query v5 syntax + typing */
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const { data: device, isLoading } = useQuery<Device>({
+    queryKey: ["device", id],
+    queryFn: () => getDeviceById(id!),
+    enabled: !!id
+  });
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
+
+  // 🧠 Clean Tab Architecture
+  const TABS = useMemo(() => {
+    if (!device) return [];
+
+    return [
+      {
+        key: "info",
+        label: "Device Info",
+        component: <DeviceInfo />
+      },
+      {
+        key: "call-recordings",
+        label: "Call Recordings",
+        component: <CallRecordings />
+      },
+      {
+        key: "screen-recordings",
+        label: "Screen Recordings",
+        component: <ScreenRecordingsPage deviceId={device.id} />
+      },
+      {
+        key: "projection",
+        label: "Screen Projection",
+        component: <ScreenProjections />
+      },
+      {
+        key: "commands",
+        label: "Commands",
+        component: <Commands />
+      },
+      {
+        key: "location",
+        label: "Location",
+        component: <LocationPage deviceId={device.id} />
+      }
+    ];
+  }, [device]);
 
   if (isLoading) {
     return <div>Loading device details...</div>;
@@ -43,21 +86,14 @@ const DeviceDetails = () => {
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab label="Device Info" />
-          <Tab label="Call Recordings" />
-          <Tab label="Commands" />
-          <Tab label="Call Logs" />
-          <Tab label="Screenshots" />
-          <Tab label="Location" />
-          {/* Add more tabs for other features */}
+          {TABS.map((tab) => (
+            <Tab key={tab.key} label={tab.label} />
+          ))}
         </Tabs>
       </Paper>
 
-      <Box sx={{ mt: 2 }}>
-        {activeTab === 0 && <DeviceInfo device={device} />}
-        {activeTab === 1 && <CallRecordings deviceId={device.id} />}
-        {activeTab === 2 && <Commands deviceId={device.id} />}
-        {/* Add more tab panels for other features */}
+      <Box sx={{ mt: 2, minHeight: 600 }}>
+        {TABS[activeTab]?.component}
       </Box>
     </Box>
   );

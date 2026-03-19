@@ -1,5 +1,5 @@
-import api from "@/services/apiBase";
-import { LocationPoint } from "@/pages/Location/types";
+import api from "../../../../services/apiBase";
+import { LocationPoint } from "../pages/Location/types";
 
 export const locationApi = {
     history(deviceId: string, limit = 500) {

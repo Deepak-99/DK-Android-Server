@@ -129,24 +129,5 @@ module.exports = (sequelize) => {
     }
   };
 
-  // Add a class method to sync the model with the database
-  Contact.syncWithDatabase = async (options = {}) => {
-    try {
-      // Skip foreign key checks to prevent issues with missing tables
-      await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
-      
-      // Sync the model with the database
-      await Contact.sync(options);
-      
-      // Re-enable foreign key checks
-      await sequelize.query('SET FOREIGN_KEY_CHECKS = 1');
-      
-      return true;
-    } catch (error) {
-      console.error('Error syncing Contact model:', error);
-      return false;
-    }
-  };
-
   return Contact;
 };

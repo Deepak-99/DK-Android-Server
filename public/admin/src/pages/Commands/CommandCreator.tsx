@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { commandsApi } from "@/services/commandsApi";
+import { commandsApi } from "../../services/commandsApi";
 import { toast } from "sonner";
 
 export default function CommandCreator({ deviceId }: { deviceId: string }) {

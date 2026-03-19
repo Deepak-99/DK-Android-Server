@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { locationApi } from "@/services/locationApi";
+import { locationApi } from "../../services/locationApi";
 import { LocationPoint } from "./types";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useWebSocket } from "../../hooks/useWebSocket";
 
 export function useLocation(deviceId: string) {
     const [points, setPoints] = useState<LocationPoint[]>([]);

@@ -1,14 +1,16 @@
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
+const db = require('../models');
+
 const {
-  User,
-  Device,
-  UserPermission,
-  Role,
-  Permission,
-  UserRole,
-  RolePermission
-} = require('../config/database');
+    User,
+    Device,
+    UserPermission,
+    Role,
+    Permission,
+    UserRole,
+    RolePermission
+} = db;
 const logger = require('../utils/logger');
 
 const buildPermissionKey = (resource, action) => `${resource}.${action}`;
@@ -93,7 +95,16 @@ const authenticateToken = async (req, res, next) => {
     // Verify token
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (decoded.tokenType !== 'access') {
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid token type',
+                code: 'INVALID_TOKEN_TYPE',
+            });
+        }
+
     } catch (err) {
       if (err.name === 'TokenExpiredError') {
         logger.warn('Token expired', { path: req.path, method: req.method });

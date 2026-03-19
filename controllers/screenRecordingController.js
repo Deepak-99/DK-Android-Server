@@ -1,38 +1,42 @@
-const { ScreenRecording, Device } = require('../../../models');
+const { ScreenRecording, Device } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const {
+    serverError,
+    parsePagination,
+    buildDateFilter,
+    safeUnlink
+} = require('../utils/controllerHelpers');
 
-/**
- * Get screen recordings for a device
- */
+const streamHub = require("../services/streamHub");
+const commandController = require("./commandController");
+
+
+
+
+/* ------------------------------------------------------------------
+ * Get screen recordings (list)
+ * ------------------------------------------------------------------ */
+
 const getScreenRecordings = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            startDate, 
-            endDate, 
-            page = 1,
-            limit = 50 
-        } = req.query;
+        const { startDate, endDate, page = 1, limit = 50 } = req.query;
 
-        const offset = (page - 1) * limit;
+        const { pageNum, limitNum, offset } = parsePagination(page, limit);
+
         const where = { deviceId };
-        
-        // Add date filters if provided
-        if (startDate || endDate) {
-            where.createdAt = {};
-            if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-            if (endDate) where.createdAt[Op.lte] = new Date(endDate);
-        }
+        const dateFilter = buildDateFilter(startDate, endDate);
+        if (dateFilter) where.createdAt = dateFilter;
 
-        const { count, rows: recordings } = await ScreenRecording.findAndCountAll({
+        const { count, rows } = await ScreenRecording.findAndCountAll({
             where,
             order: [['createdAt', 'DESC']],
-            limit: parseInt(limit),
-            offset: parseInt(offset),
+            limit: limitNum,
+            offset,
             include: [{
                 model: Device,
                 attributes: ['id', 'deviceName']
@@ -41,27 +45,23 @@ const getScreenRecordings = async (req, res) => {
 
         return res.json({
             success: true,
-            data: recordings,
+            data: rows,
             pagination: {
                 total: count,
-                page: parseInt(page),
-                totalPages: Math.ceil(count / limit)
+                page: pageNum,
+                totalPages: Math.ceil(count / limitNum)
             }
         });
 
     } catch (error) {
-        logger.error('Error fetching screen recordings:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch screen recordings',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+        return serverError(res, 'Failed to fetch screen recordings', error);
     }
 };
 
-/**
- * Get a single screen recording by ID
- */
+/* ------------------------------------------------------------------
+ * Get single screen recording
+ * ------------------------------------------------------------------ */
+
 const getScreenRecording = async (req, res) => {
     try {
         const { id } = req.params;
@@ -86,17 +86,14 @@ const getScreenRecording = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error fetching screen recording:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch screen recording'
-        });
+        return serverError(res, 'Failed to fetch screen recording', error);
     }
 };
 
-/**
+/* ------------------------------------------------------------------
  * Delete screen recordings
- */
+ * ------------------------------------------------------------------ */
+
 const deleteScreenRecordings = async (req, res) => {
     try {
         const { deviceId } = req.params;
@@ -112,7 +109,7 @@ const deleteScreenRecordings = async (req, res) => {
         // Verify all recordings belong to the device
         const recordings = await ScreenRecording.findAll({
             where: {
-                id: recordingIds,
+                id: { [Op.in]: recordingIds },
                 deviceId
             }
         });
@@ -124,23 +121,13 @@ const deleteScreenRecordings = async (req, res) => {
             });
         }
 
-        // Delete files from storage
-        for (const recording of recordings) {
-            if (recording.filePath && fs.existsSync(recording.filePath)) {
-                fs.unlinkSync(recording.filePath);
-            }
-            
-            // Delete thumbnail if exists
-            if (recording.thumbnailPath && fs.existsSync(recording.thumbnailPath)) {
-                fs.unlinkSync(recording.thumbnailPath);
-            }
-        }
+        recordings.forEach(r => {
+            safeUnlink(r.filePath);
+            safeUnlink(r.thumbnailPath);
+        });
 
-        // Delete from database
         await ScreenRecording.destroy({
-            where: {
-                id: recordingIds
-            }
+            where: { id: { [Op.in]: recordingIds } }
         });
 
         return res.json({
@@ -149,29 +136,22 @@ const deleteScreenRecordings = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error deleting screen recordings:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to delete screen recordings'
-        });
+        return serverError(res, 'Failed to delete screen recordings', error);
     }
 };
 
-/**
- * Get screen recording statistics
- */
+/* ------------------------------------------------------------------
+ * Screen recording statistics
+ * ------------------------------------------------------------------ */
+
 const getScreenRecordingStats = async (req, res) => {
     try {
         const { deviceId } = req.params;
         const { startDate, endDate } = req.query;
 
         const where = { deviceId };
-        
-        if (startDate || endDate) {
-            where.createdAt = {};
-            if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-            if (endDate) where.createdAt[Op.lte] = new Date(endDate);
-        }
+        const dateFilter = buildDateFilter(startDate, endDate);
+        if (dateFilter) where.createdAt = dateFilter;
 
         const stats = await ScreenRecording.findOne({
             attributes: [
@@ -187,30 +167,27 @@ const getScreenRecordingStats = async (req, res) => {
         return res.json({
             success: true,
             data: {
-                totalRecordings: parseInt(stats.totalRecordings) || 0,
-                totalDuration: parseInt(stats.totalDuration) || 0,
-                totalSize: parseInt(stats.totalSize) || 0,
-                avgDuration: parseFloat(stats.avgDuration) || 0
+                totalRecordings: Number(stats?.totalRecordings) || 0,
+                totalDuration: Number(stats?.totalDuration) || 0,
+                totalSize: Number(stats?.totalSize) || 0,
+                avgDuration: Number(stats?.avgDuration) || 0
             }
         });
 
     } catch (error) {
-        logger.error('Error getting screen recording stats:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to get screen recording statistics'
-        });
+        return serverError(res, 'Failed to get screen recording statistics', error);
     }
 };
 
-/**
- * Start a new screen recording
- */
+/* ------------------------------------------------------------------
+ * Start screen recording
+ * ------------------------------------------------------------------ */
+
 const startScreenRecording = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            quality = 'high', 
+        const {
+            quality = 'high',
             resolution = '720p',
             bitRate = 4000000,
             audioSource = 'mic',
@@ -221,12 +198,12 @@ const startScreenRecording = async (req, res) => {
         const recording = await ScreenRecording.create({
             id: uuidv4(),
             deviceId,
-            status: 'pending',
-            quality,
-            resolution,
-            bitRate,
-            audioSource,
-            maxDuration
+            status: 'recording',
+            quality: String(quality),
+            resolution: String(resolution),
+            bitRate: Number(bitRate),
+            audioSource: String(audioSource),
+            maxDuration: Number(maxDuration)
         });
 
         // TODO: Send command to device to start recording
@@ -239,26 +216,33 @@ const startScreenRecording = async (req, res) => {
         //     maxDuration
         // });
 
+        /* start recording from stream */
+        streamHub.startRecording(deviceId, recording.filePath);
+
+        /* send command to device */
+        await commandController.sendDeviceCommand(deviceId, {
+            type: "SCREEN_RECORDING_START",
+            data: { recordingId: recording.id }
+        });
+
         return res.status(202).json({
             success: true,
             data: {
                 recordingId: recording.id,
-                status: 'pending'
+                status: recording.status
             }
         });
 
     } catch (error) {
-        logger.error('Error starting screen recording:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to start screen recording'
-        });
+        return serverError(res, 'Failed to start screen recording', error);
     }
 };
 
-/**
- * Stop a screen recording
- */
+
+/* ------------------------------------------------------------------ */
+/* STOP SCREEN RECORDING */
+/* ------------------------------------------------------------------ */
+
 const stopScreenRecording = async (req, res) => {
     try {
         const { recordingId } = req.params;
@@ -271,12 +255,13 @@ const stopScreenRecording = async (req, res) => {
             });
         }
 
-        if (recording.status !== 'recording') {
-            return res.status(400).json({
-                success: false,
-                error: 'Recording is not in progress'
-            });
-        }
+        /* stop streamHub recording */
+        streamHub.stopRecording(recording.deviceId);
+
+        await commandController.sendDeviceCommand(recording.deviceId, {
+            type: "SCREEN_RECORDING_STOP",
+            data: { recordingId }
+        });
 
         // TODO: Send command to device to stop recording
         // await sendCommandToDevice(recording.deviceId, 'STOP_SCREEN_RECORDING', {
@@ -290,17 +275,17 @@ const stopScreenRecording = async (req, res) => {
 
         return res.json({
             success: true,
-            message: 'Stop command sent to device'
+            message: 'Recording stopped'
         });
 
     } catch (error) {
-        logger.error('Error stopping screen recording:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to stop screen recording'
-        });
+        return serverError(res, 'Failed to stop screen recording', error);
     }
 };
+
+/* ------------------------------------------------------------------
+ * Exports
+ * ------------------------------------------------------------------ */
 
 module.exports = {
     getScreenRecordings,

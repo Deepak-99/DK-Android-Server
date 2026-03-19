@@ -1,6 +1,5 @@
-import api from "./apiBase";
-import { CommandDTO, CommandType } from "@/types/commands";
-import { CommandItem } from "@/pages/Commands/types";
+import api from "../../apiBase";
+import { CommandItem } from "../pages/Commands/types";
 
 export const commandsApi = {
     list(deviceId: string) {

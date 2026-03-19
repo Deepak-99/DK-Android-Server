@@ -14,6 +14,9 @@ module.exports = {
         FAILED: 'failed',
         CANCELLED: 'cancelled',
         EXPIRED: 'expired',
-        RETRIED: 'retried'
+        RETRIED: 'retried',
+        SCREEN_STREAM_START: "SCREEN_STREAM_START",
+        SCREEN_STREAM_STOP: "SCREEN_STREAM_STOP",
+
     }
 };

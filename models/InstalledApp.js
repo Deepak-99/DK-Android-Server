@@ -191,10 +191,6 @@ module.exports = (sequelize) => {
           type: DataTypes.INTEGER,
           allowNull: true
       },
-      min_sdk_version: {
-          type: DataTypes.INTEGER,
-          allowNull: true
-      },
       installer_package: {
           type: DataTypes.STRING,
           allowNull: true,
@@ -255,29 +251,4 @@ module.exports = (sequelize) => {
 
   return InstalledApp;
 
-  // Add a class method to sync the model with the database
-  InstalledApp.syncWithDatabase = async (options = {}) => {
-    const queryInterface = sequelize.getQueryInterface();
-    try {
-        // First sync the model to ensure the table exists
-        await InstalledApp.sync(options);
-
-        // Handle the unique index
-        await queryInterface.removeIndex('installed_apps', 'idx_installed_apps_device_package').catch(() => {});
-        
-        // Add the unique index with the correct column names
-        await queryInterface.addIndex('installed_apps', {
-            fields: ['device_id', 'package_name'],
-            name: 'idx_installed_apps_device_package',
-            unique: true
-        });
-
-        return true;
-    } catch (error) {
-        console.error('Error syncing InstalledApp model:', error);
-        throw error;
-    }
-  };
-
-  return InstalledApp;
 };

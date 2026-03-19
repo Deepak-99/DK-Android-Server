@@ -1,4 +1,4 @@
-import { Slider } from "@/components/ui/slider";
+import { Slider } from "@mui/material";
 
 export default function LocationTimeline({ history }: { history: any[] }) {
     return (

@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
-import { 
-  Box, 
-  Typography, 
-  List, 
-  ListItem, 
-  ListItemIcon, 
-  ListItemText, 
-  Checkbox, 
-  IconButton, 
-  Divider, 
+import { useState, Fragment } from 'react';
+import {
+  Box,
+  Typography,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Checkbox,
+  IconButton,
+  Divider,
   Chip,
   Paper,
   Tabs,
@@ -17,17 +18,17 @@ import {
   TextField,
   InputAdornment
 } from '@mui/material';
-import { 
-  Notifications as NotificationsIcon, 
+
+import {
+  Notifications as NotificationsIcon,
   NotificationsNone as NotificationsNoneIcon,
   NotificationsOff as NotificationsOffIcon,
   Search as SearchIcon,
   FilterList as FilterListIcon,
   Delete as DeleteIcon,
-  MarkEmailRead as MarkEmailReadIcon,
-  MarkEmailUnread as MarkEmailUnreadIcon,
-  Archive as ArchiveIcon
+  MarkEmailRead as MarkEmailReadIcon
 } from '@mui/icons-material';
+
 import { formatDistanceToNow } from 'date-fns';
 
 interface Notification {
@@ -40,7 +41,8 @@ interface Notification {
   source: string;
 }
 
-const NotificationCenter: React.FC = () => {
+export default function NotificationCenter() {
+
   const [activeTab, setActiveTab] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,44 +61,45 @@ const NotificationCenter: React.FC = () => {
     // Add more mock notifications...
   ]);
 
-  const filteredNotifications = notifications.filter(notification => {
-    const matchesSearch = notification.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         notification.message.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (activeTab === 0) return matchesSearch; // All
-    if (activeTab === 1) return !notification.read && matchesSearch; // Unread
-    if (activeTab === 2) return notification.type === 'error' && matchesSearch; // Alerts
+  const filteredNotifications = notifications.filter((notification) => {
+    const matchesSearch =
+      notification.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      notification.message.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (activeTab === 0) return matchesSearch;
+    if (activeTab === 1) return !notification.read && matchesSearch;
+    if (activeTab === 2) return notification.type === 'error' && matchesSearch;
+
     return true;
   });
 
   const handleToggle = (id: string) => {
-    const currentIndex = selected.indexOf(id);
-    const newSelected = [...selected];
-
-    if (currentIndex === -1) {
-      newSelected.push(id);
-    } else {
-      newSelected.splice(currentIndex, 1);
-    }
-
-    setSelected(newSelected);
+    setSelected(prev =>
+      prev.includes(id)
+        ? prev.filter(item => item !== id)
+        : [...prev, id]
+    );
   };
 
   const handleMarkAsRead = (ids: string[]) => {
-    setNotifications(notifications.map(notification => 
-      ids.includes(notification.id) ? { ...notification, read: true } : notification
-    ));
+    setNotifications(prev =>
+      prev.map(notification =>
+        ids.includes(notification.id)
+          ? { ...notification, read: true }
+          : notification
+      )
+    );
     setSelected([]);
   };
 
   const handleDelete = (ids: string[]) => {
-    setNotifications(notifications.filter(notification => 
-      !ids.includes(notification.id)
-    ));
-    setSelected(selected.filter(id => !ids.includes(id)));
+    setNotifications(prev =>
+      prev.filter(notification => !ids.includes(notification.id))
+    );
+    setSelected(prev => prev.filter(id => !ids.includes(id)));
   };
 
-  const getTypeColor = (type: string) => {
+  const getTypeColor = (type: Notification['type']) => {
     switch (type) {
       case 'success': return 'success.main';
       case 'error': return 'error.main';
@@ -109,21 +112,23 @@ const NotificationCenter: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+
+      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+        <Typography variant="h4">
           Notification Center
         </Typography>
+
         <Box>
-          <IconButton 
-            color="inherit" 
+          <IconButton
             disabled={selected.length === 0}
             onClick={() => handleMarkAsRead(selected)}
             title="Mark as read"
           >
             <MarkEmailReadIcon />
           </IconButton>
-          <IconButton 
-            color="inherit" 
+
+          <IconButton
             disabled={selected.length === 0}
             onClick={() => handleDelete(selected)}
             title="Delete selected"
@@ -133,178 +138,176 @@ const NotificationCenter: React.FC = () => {
         </Box>
       </Box>
 
+      {/* Search & Tabs */}
       <Paper sx={{ mb: 3, p: 2 }}>
+
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <TextField
             fullWidth
-            variant="outlined"
             placeholder="Search notifications..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                )
+              }
             }}
           />
+
           <IconButton sx={{ ml: 1 }}>
             <FilterListIcon />
           </IconButton>
         </Box>
 
-        <Tabs 
-          value={activeTab} 
+        <Tabs
+          value={activeTab}
           onChange={(_, newValue) => setActiveTab(newValue)}
           variant="fullWidth"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
-          <Tab 
+          <Tab
             label={
               <Badge badgeContent={notifications.length} color="primary">
                 All
               </Badge>
-            } 
+            }
           />
-          <Tab 
+          <Tab
             label={
-              <Badge 
-                badgeContent={notifications.filter(n => !n.read).length} 
+              <Badge
+                badgeContent={notifications.filter(n => !n.read).length}
                 color="error"
               >
                 Unread
               </Badge>
-            } 
+            }
           />
-          <Tab 
+          <Tab
             label={
-              <Badge 
-                badgeContent={notifications.filter(n => n.type === 'error').length} 
+              <Badge
+                badgeContent={notifications.filter(n => n.type === 'error').length}
                 color="warning"
               >
                 Alerts
               </Badge>
-            } 
+            }
           />
         </Tabs>
       </Paper>
 
+      {/* List */}
       <List>
+
         {filteredNotifications.length === 0 ? (
           <Box sx={{ textAlign: 'center', p: 4 }}>
             <NotificationsOffIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" color="textSecondary">
+            <Typography variant="h6" color="text.secondary">
               No notifications found
             </Typography>
           </Box>
         ) : (
+
           filteredNotifications.map((notification) => (
-            <React.Fragment key={notification.id}>
-              <ListItem 
-                button 
-                selected={selected.indexOf(notification.id) !== -1}
-                onClick={() => handleToggle(notification.id)}
-                sx={{
-                  bgcolor: notification.read ? 'background.paper' : 'action.hover',
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                  },
-                }}
-              >
-                <ListItemIcon>
-                  <Checkbox
-                    edge="start"
-                    checked={selected.indexOf(notification.id) !== -1}
-                    tabIndex={-1}
-                    disableRipple
+
+            <Fragment key={notification.id}>
+
+              <ListItem disablePadding>
+                <ListItemButton
+                  selected={selected.includes(notification.id)}
+                  onClick={() => handleToggle(notification.id)}
+                  sx={{
+                    bgcolor: notification.read ? 'background.paper' : 'action.hover',
+                    '&:hover': { bgcolor: 'action.hover' }
+                  }}
+                >
+
+                  <ListItemIcon>
+                    <Checkbox
+                      edge="start"
+                      checked={selected.includes(notification.id)}
+                      disableRipple
+                    />
+                  </ListItemIcon>
+
+                  <ListItemIcon>
+                    {notification.read
+                      ? <NotificationsNoneIcon />
+                      : <NotificationsIcon color="primary" />
+                    }
+                  </ListItemIcon>
+
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            fontWeight: notification.read ? 'normal' : 'bold',
+                            mr: 1
+                          }}
+                        >
+                          {notification.title}
+                        </Typography>
+
+                        <Chip
+                          label={notification.source}
+                          size="small"
+                          sx={{
+                            height: 20,
+                            fontSize: '0.6rem',
+                            bgcolor: getTypeColor(notification.type),
+                            color: 'white'
+                          }}
+                        />
+                      </Box>
+                    }
+                    secondary={
+                      <>
+                        <Typography variant="body2">
+                          {notification.message}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
+                        </Typography>
+                      </>
+                    }
                   />
-                </ListItemIcon>
-                <ListItemIcon>
-                  {notification.read ? (
-                    <NotificationsNoneIcon />
-                  ) : (
-                    <NotificationsIcon color="primary" />
-                  )}
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Typography 
-                        variant="subtitle1" 
-                        component="span"
-                        sx={{ 
-                          fontWeight: notification.read ? 'normal' : 'bold',
-                          mr: 1
-                        }}
-                      >
-                        {notification.title}
-                      </Typography>
-                      <Chip 
-                        label={notification.source}
-                        size="small"
-                        sx={{ 
-                          height: 20, 
-                          fontSize: '0.6rem',
-                          bgcolor: getTypeColor(notification.type),
-                          color: 'white'
-                        }}
-                      />
-                    </Box>
-                  }
-                  secondary={
-                    <>
-                      <Typography
-                        component="span"
-                        variant="body2"
-                        color="textPrimary"
-                        sx={{ display: 'block' }}
-                      >
-                        {notification.message}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="textSecondary"
-                      >
-                        {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
-                      </Typography>
-                    </>
-                  }
-                  primaryTypographyProps={{ noWrap: true }}
-                  secondaryTypographyProps={{ component: 'div' }}
-                />
-                <Box sx={{ display: 'flex' }}>
+
                   {!notification.read && (
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleMarkAsRead([notification.id]);
                       }}
-                      title="Mark as read"
                     >
                       <MarkEmailReadIcon fontSize="small" />
                     </IconButton>
                   )}
-                  <IconButton 
-                    size="small" 
+
+                  <IconButton
+                    size="small"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDelete([notification.id]);
                     }}
-                    title="Delete"
                   >
                     <DeleteIcon fontSize="small" />
                   </IconButton>
-                </Box>
+
+                </ListItemButton>
               </ListItem>
+
               <Divider component="li" />
-            </React.Fragment>
+
+            </Fragment>
           ))
         )}
+
       </List>
     </Box>
   );
-};
-
-export default NotificationCenter;
+}

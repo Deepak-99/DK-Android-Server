@@ -1,6 +1,10 @@
 require('dotenv').config();
 
 module.exports = {
+
+  uploadDir: process.env.UPLOAD_DIR || './uploads',
+  tempDir: process.env.TEMP_DIR || './temp',
+
   development: {
     username: process.env.DB_USER || 'hawkshaw_user',
     password: process.env.DB_PASSWORD || '8095@DKpassword',
@@ -10,6 +14,7 @@ module.exports = {
     dialect: 'mysql',
     logging: false
   },
+
   test: {
     username: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
@@ -18,12 +23,14 @@ module.exports = {
     port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
     logging: process.env.NODE_ENV === 'test' ? false : console.log,
+
     pool: {
       max: parseInt(process.env.DB_POOL_MAX || '5'),
       min: parseInt(process.env.DB_POOL_MIN || '0'),
-      acquire: parseInt(process.env.DB_POOL_ACQUIRE || '30000'),
+      acquire: parseInt(process.env.DB_POOL_ACQUIRE || '60000'),
       idle: parseInt(process.env.DB_POOL_IDLE || '10000')
     },
+
     dialectOptions: {
       supportBigNumbers: true,
       bigNumberStrings: true,

@@ -1,5 +1,5 @@
 import api from "@/services/apiBase";
-import { CallRecording } from "@/pages/CallRecordings/types";
+import { CallRecording } from "../pages/CallRecordings/types";
 
 export const recordingsApi = {
     list(deviceId: string) {

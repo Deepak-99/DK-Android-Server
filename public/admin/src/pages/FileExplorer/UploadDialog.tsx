@@ -1,11 +1,19 @@
-import { fileApi } from "@/services/fileApi";
+import { ChangeEvent } from "react";
+import { fileApi } from "../../services/fileApi";
 
 export default function UploadDialog({ cwd, onClose }: any) {
-    async function selectFiles(e: any) {
-        const files = Array.from(e.target.files);
-        for (const f of files) {
-            await fileApi.upload(cwd, f);
+
+    async function selectFiles(e: ChangeEvent<HTMLInputElement>) {
+        const fileList = e.target.files;
+
+        if (!fileList) return;
+
+        const files: File[] = Array.from(fileList);
+
+        for (const file of files) {
+            await fileApi.upload(cwd, file);
         }
+
         onClose();
     }
 

@@ -1,49 +1,84 @@
 // App.tsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import ErrorBoundary from './components/common/ErrorBoundary';
-import AppRoutes from './routes';
-import theme from './theme';
-import Layout from './components/layout/Layout';
 
-// Lazy load pages for better performance
-const Login = React.lazy(() => import('./pages/auth/Login'));
-const Dashboard = React.lazy(() => import('./pages/dashboard'));
-const Devices = React.lazy(() => import('./pages/devices'));
-const DeviceDetails = React.lazy(() => import('./pages/devices/[id]'));
+import  {JSX, lazy, Suspense, useEffect, ReactNode} from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// Feature pages
-const CallLogs = React.lazy(() => import('./pages/devices/[id]/features/CallLogs'));
-const CallRecordings = React.lazy(() => import('./pages/devices/[id]/features/CallRecordings'));
-const Commands = React.lazy(() => import('./pages/devices/[id]/features/Commands'));
-// Import other feature components...
+import { ThemeProvider } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import { Box, Button, Typography } from "@mui/material";
 
-// Protected route component
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-    const { isAuthenticated } = useAuth();
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
+import { Toaster } from "sonner";
+
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import Layout from "./components/layout/Layout";
+import theme from "./theme";
+
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { connect, disconnect } from "./services/websocket";
+
+// --------------------
+// Lazy pages
+// --------------------
+
+const Login = SuspenseWrapper(() => import("./pages/auth/Login"));
+const Dashboard = SuspenseWrapper(() => import("./pages/dashboard"));
+const Devices = SuspenseWrapper(() => import("./pages/devices/[id]"));
+const DeviceDetails = SuspenseWrapper(() => import("./pages/devices/[id]"));
+
+const CallLogs = SuspenseWrapper(
+  () => import("./pages/devices/[id]/features/CallLogs")
+);
+
+const CallRecordings = SuspenseWrapper(
+  () => import("./pages/devices/[id]/features/CallRecordings")
+);
+
+const Commands = SuspenseWrapper(
+  () => import("./pages/devices/[id]/features/Commands")
+);
+
+// --------------------
+// React Query
+// --------------------
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 5 * 60 * 1000,
     },
   },
 });
 
-    if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
-    }
+// --------------------
+// Protected Route
+// --------------------
 
-    return children;
-};
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+// --------------------
+// App
+// --------------------
 
 function App() {
+
+  useEffect(() => {
+    connect();
+    return () => disconnect();
+  }, []);
+
   return (
     <ErrorBoundary
       fallback={
@@ -53,7 +88,6 @@ function App() {
           </Typography>
           <Button
             variant="contained"
-            color="primary"
             onClick={() => window.location.reload()}
           >
             Reload Application
@@ -63,43 +97,52 @@ function App() {
     >
       <QueryClientProvider client={queryClient}>
         <ThemeProvider theme={theme}>
-            <CssBaseline />
-            <AuthProvider>
-                <BrowserRouter>
-                    <Suspense fallback={<div>Loading...</div>}>
-                        <Routes>
-                            <Route path="/login" element={<Login />} />
-                            <Route
-                                path="/"
-                                element={
-                                    <ProtectedRoute>
-                                        <Layout />
-                                    </ProtectedRoute>
-                                }
-                            >
-                                <Route index element={<Dashboard />} />
-                                <Route path="devices" element={<Devices />} />
-                                <Route path="devices/:id" element={<DeviceDetails />}>
-                                    <Route index element={<Navigate to="overview" replace />} />
-                                    <Route path="overview" element={<DeviceOverview />} />
-                                    <Route path="call-logs" element={<CallLogs />} />
-                                    <Route path="call-recordings" element={<CallRecordings />} />
-                                    <Route path="commands" element={<Commands />} />
-                                    {/* Add other feature routes */}
-                                </Route>
-                            </Route>
-                            <Route path="*" element={<Navigate to="/" replace />} />
-                        </Routes>
-                    </Suspense>
-                </BrowserRouter>
+          <CssBaseline />
 
-                <Router>
-                    <AppRoutes />
-                </Router>
-                {process.env.NODE_ENV === 'development' && (
-                    <ReactQueryDevtools initialIsOpen={false} />
-                )}
-            </AuthProvider>
+          <Toaster position="top-right" richColors closeButton />
+
+          <AuthProvider>
+            <BrowserRouter>
+
+              <Routes>
+
+                {/* Public */}
+                <Route path="/login" element={<Login />} />
+
+                {/* Protected */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Dashboard />} />
+
+                  <Route path="devices" element={<Devices />} />
+
+                  <Route path="devices/:id" element={<DeviceDetails />}>
+                    <Route index element={<Navigate to="call-logs" replace />} />
+                    <Route path="call-logs" element={<CallLogs />} />
+                    <Route path="call-recordings" element={<CallRecordings />} />
+                    <Route path="commands" element={<Commands />} />
+                  </Route>
+
+                </Route>
+
+                <Route path="*" element={<Navigate to="/" replace />} />
+
+              </Routes>
+
+            </BrowserRouter>
+
+            {process.env.NODE_ENV === "development" && (
+              <ReactQueryDevtools initialIsOpen={false} />
+            )}
+
+          </AuthProvider>
+
         </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
@@ -107,3 +150,18 @@ function App() {
 }
 
 export default App;
+
+// --------------------
+// Lazy helper
+// --------------------
+
+function SuspenseWrapper(importer: () => Promise<{ default: React.ComponentType<any> }>) {
+    const LazyComponent = lazy(importer);
+
+    return (props: any) => (
+        <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
+            <LazyComponent {...props} />
+        </Suspense>
+    );
+}
+

@@ -1,6 +1,6 @@
-const { Location, Device } = require('../../../models');
+const { Location, Device } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const geolib = require('geolib');
 const { parse } = require('json2csv');
@@ -43,7 +43,7 @@ exports.syncLocations = async (req, res) => {
 
         for (let i = 0; i < locations.length; i += BATCH_SIZE) {
             const batch = locations.slice(i, i + BATCH_SIZE);
-            const batchPromises = batch.map(location => 
+            const batchPromises = batch.map(location =>
                 processLocation(deviceId, location).catch(error => {
                     logger.error(`[${requestId}] Error processing location:`, error);
                     return { error: error.message };
@@ -51,7 +51,7 @@ exports.syncLocations = async (req, res) => {
             );
 
             const batchResults = await Promise.all(batchPromises);
-            
+
             batchResults.forEach(result => {
                 if (result && !result.error) {
                     if (result.wasNew) results.created++;
@@ -128,18 +128,18 @@ async function processLocation(deviceId, location) {
 exports.getLocationHistory = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            startDate, 
+        const {
+            startDate,
             endDate,
             minAccuracy,
             minSpeed,
-            page = 1, 
-            limit = 1000 
+            page = 1,
+            limit = 1000
         } = req.query;
 
         // Build where clause
         const where = { deviceId };
-        
+
         // Filter by date range
         if (startDate || endDate) {
             where.timestamp = {};
@@ -274,13 +274,13 @@ exports.getLocationStatistics = async (req, res) => {
                 { latitude: prev.latitude, longitude: prev.longitude },
                 { latitude: curr.latitude, longitude: curr.longitude }
             );
-            
+
             // Calculate time difference (in hours)
             const timeDiff = (new Date(curr.timestamp) - new Date(prev.timestamp)) / (1000 * 60 * 60);
-            
+
             // Calculate speed (km/h)
             const speed = timeDiff > 0 ? (distance / 1000) / timeDiff : 0;
-            
+
             distanceTraveled += distance;
             totalSpeed += speed;
             maxSpeed = Math.max(maxSpeed, speed);
@@ -325,10 +325,10 @@ exports.getLocationStatistics = async (req, res) => {
 exports.getLocationsInArea = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            north, 
-            south, 
-            east, 
+        const {
+            north,
+            south,
+            east,
             west,
             startDate,
             endDate
@@ -410,7 +410,7 @@ exports.exportLocations = async (req, res) => {
                     'timestamp', 'latitude', 'longitude', 'accuracy', 'altitude',
                     'speed', 'heading', 'batteryLevel', 'provider', 'isFromMockProvider'
                 ];
-                
+
                 const csvWriter = createObjectCsvWriter({
                     path: 'temp.csv',
                     header: csvFields.map(field => ({ id: field, title: field }))
@@ -419,7 +419,7 @@ exports.exportLocations = async (req, res) => {
                 await csvWriter.writeRecords(locations);
                 data = require('fs').readFileSync('temp.csv');
                 require('fs').unlinkSync('temp.csv');
-                
+
                 contentType = 'text/csv';
                 fileName += '.csv';
                 break;
@@ -443,7 +443,7 @@ ${locations.map(loc => `            <trkpt lat="${loc.latitude}" lon="${loc.long
         </trkseg>
     </trk>
 </gpx>`;
-                
+
                 data = gpx;
                 contentType = 'application/gpx+xml';
                 fileName += '.gpx';
@@ -480,7 +480,7 @@ ${locations.map(loc => `                    ${loc.longitude},${loc.latitude},${l
         </Placemark>
     </Document>
 </kml>`;
-                
+
                 data = kml;
                 contentType = 'application/vnd.google-earth.kml+xml';
                 fileName += '.kml';
@@ -509,10 +509,10 @@ ${locations.map(loc => `                    ${loc.longitude},${loc.latitude},${l
                         }
                     }))
                 };
-                
+
                 data = JSON.stringify(geoJson, null, 2);
-                contentType = format.toLowerCase() === 'geojson' 
-                    ? 'application/geo+json' 
+                contentType = format.toLowerCase() === 'geojson'
+                    ? 'application/geo+json'
                     : 'application/json';
                 fileName += format.toLowerCase() === 'geojson' ? '.geojson' : '.json';
         }
@@ -563,7 +563,7 @@ exports.getLocationHeatmap = async (req, res) => {
             const lat = Math.floor(loc.latitude / cellSize) * cellSize;
             const lng = Math.floor(loc.longitude / cellSize) * cellSize;
             const key = `${lat},${lng}`;
-            
+
             if (!grid[key]) {
                 grid[key] = {
                     latitude: lat + cellSize / 2,
@@ -572,7 +572,7 @@ exports.getLocationHeatmap = async (req, res) => {
                     timestamps: []
                 };
             }
-            
+
             grid[key].count++;
             grid[key].timestamps.push(loc.timestamp);
         });

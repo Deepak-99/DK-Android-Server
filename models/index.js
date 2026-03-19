@@ -1,56 +1,73 @@
 // models/index.js
-'use strict';
+const fs = require("fs");
+const path = require("path");
+const { DataTypes, Sequelize } = require("sequelize");
 
-const fs = require('fs');
-const path = require('path');
-const Sequelize = require('sequelize');
-const process = require('process');
-const basename = path.basename(__filename);
-const env = process.env.NODE_ENV || 'development';
-const config = require(__dirname + '/../config/config.js')[env];
-const db = {};
-const CallRecording = require('./CallRecording')(sequelize, Sequelize.DataTypes);
-const ScreenRecording = require('./ScreenRecording')(sequelize, Sequelize.DataTypes);
-const Screenshot = require('./Screenshot')(sequelize, Sequelize.DataTypes);
+console.log("[MODELS] STEP 1: models/index.js loaded");
 
-let sequelize;
-if (config.use_env_variable) {
-  sequelize = new Sequelize(process.env[config.use_env_variable], config);
-} else {
-  sequelize = new Sequelize(
-    config.database,
-    config.username,
-    config.password,
-    {
-      ...config,
-      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+module.exports = (sequelize) => {
+
+  console.log("[MODELS] STEP 2: Loading models with sequelize");
+
+  const db = {};
+  const basename = path.basename(__filename);
+
+  const files = fs.readdirSync(__dirname);
+
+  console.log("[MODELS] STEP 3: Files detected:", files);
+
+  files
+      .filter(file => {
+          return (
+              file !== basename &&
+              file !== 'db.js' &&   // <-- important fix
+              file.endsWith('.js') &&
+              !file.endsWith('.test.js')
+          );
+      })
+    .forEach(file => {
+
+      console.log(`[MODELS] STEP 4: Loading model → ${file}`);
+
+      const modelPath = path.join(__dirname, file);
+
+      try {
+
+        const model = require(modelPath)(sequelize, DataTypes);
+
+        db[model.name] = model;
+
+        console.log(`[MODELS] STEP 5: Model loaded → ${model.name}`);
+
+      } catch (err) {
+
+        console.error(`[MODELS] ERROR loading ${file}`, err);
+
+      }
+
+    });
+
+  console.log("[MODELS] STEP 6: Running associations");
+
+  Object.keys(db).forEach(modelName => {
+
+    const model = db[modelName];
+
+    if (typeof model.associate === "function") {
+
+      console.log(`[MODELS] Associating ${modelName}`);
+
+      model.associate(db);
+
     }
-  );
-}
 
-// Import all model files
-fs.readdirSync(__dirname)
-  .filter(file => {
-    return (
-      file.indexOf('.') !== 0 &&
-      file !== basename &&
-      file.slice(-3) === '.js' &&
-      file.indexOf('.test.js') === -1
-    );
-  })
-  .forEach(file => {
-    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
-    db[model.name] = model;
   });
 
-// Set up associations if any
-Object.keys(db).forEach(modelName => {
-  if (db[modelName].associate) {
-    db[modelName].associate(db);
-  }
-});
+  db.sequelize = sequelize;
+  db.Sequelize = Sequelize;
 
-db.sequelize = sequelize;
-db.Sequelize = Sequelize;
+  console.log(`[MODELS] STEP 7: ${Object.keys(db).length - 2} models ready`);
 
-module.exports = db;
+  return db;
+
+};

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { contactsApi } from "@/services/contactsApi";
+import { contactsApi } from "../../services/contactsApi";
 import { toast } from "sonner";
 
 export default function AddContactModal({

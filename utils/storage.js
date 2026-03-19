@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
-const config = require('../config');
+const config = require('../config/config');
 
 // Ensure upload directories exist
 const uploadDirs = {

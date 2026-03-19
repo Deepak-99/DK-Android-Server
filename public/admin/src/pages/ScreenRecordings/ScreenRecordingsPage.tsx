@@ -2,7 +2,8 @@ import { useScreenRecordings } from "./useScreenRecordings";
 import RecordingList from "./RecordingList";
 import RecordingPlayer from "./RecordingPlayer";
 import RecordingToolbar from "./RecordingToolbar";
-import { screenRecordingApi } from "@/services/screenRecordingApi";
+import { screenRecordingApi } from "../../services/screenRecordingApi";
+import {error} from "winston";
 
 export default function ScreenRecordingsPage({ deviceId }: any) {
     const { files, selected, setSelected, reload } =
@@ -26,9 +27,11 @@ export default function ScreenRecordingsPage({ deviceId }: any) {
                 <RecordingToolbar file={selected} onDelete={handleDelete} />
                 <RecordingPlayer
                     file={selected}
-                    streamUrl={screenRecordingApi.streamUrl}
+                    streamUrl={screenRecordingApi.stream}
                 />
             </div>
+
+
         </div>
     );
 }

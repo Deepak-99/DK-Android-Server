@@ -1,77 +1,125 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCommands } from "./useCommands";
-import CommandTypeSelector from "./CommandTypeSelector";
-import CommandForm from "./CommandForm";
-import CommandHistory from "./CommandHistory";
-import { COMMAND_PRESETS } from "./commandPresets";
-import CommandList from "./CommandList";
 import CommandCreator from "./CommandCreator";
+import CommandList from "./CommandList";
 import CommandOutput from "./CommandOutput";
 import ScreenshotViewer from "./ScreenshotViewer";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import api from "../../api/axios";
+import { subscribe } from "../../services/websocket";
+
+interface CommandEvent {
+  type: string;
+}
 
 export default function CommandsPage({ deviceId }: { deviceId: string }) {
-    const { list,history, loading, send, reload } = useCommands(deviceId);
-    const [selected, setSelected] = useState<any>(null);
-    const [currentType, setCurrentType] = useState<string | null>(null);
-    const [params, setParams] = useState<any>({});
-    const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const { list, loading, send } = useCommands(deviceId);
 
-    function choose(type: string, defaultParams: any) {
-        setCurrentType(type);
-        setParams(defaultParams);
-    }
+  const [selected, setSelected] = useState<any | null>(null);
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [commands, setCommands] = useState<any[]>([]);
 
-    function updateParam(k: string, v: any) {
-        setParams({ ...params, [k]: v });
+  /* ---------------------------
+     Load commands from API
+  ---------------------------- */
+
+  const loadCommands = async () => {
+    try {
+      const res = await api.get("/commands", {
+        params: { deviceId }
+      });
+
+      setCommands(res.data || []);
+    } catch (err) {
+      console.error("Failed to load commands", err);
     }
-    useWebSocket("screenshot.new", (payload: { device_id: string; url: string }) => {
+  };
+
+  /* ---------------------------
+     Initial load
+  ---------------------------- */
+
+  useEffect(() => {
+    void loadCommands();
+  }, [deviceId]);
+
+  /* ---------------------------
+     WebSocket live updates
+  ---------------------------- */
+
+  useEffect(() => {
+    const unsubscribe = subscribe((event: CommandEvent) => {
+      if (event.type === "command_response") {
+        void loadCommands();
+      }
+
+      if (event.type === "screenshot.new") {
+        const payload = event as any;
+
         if (payload.device_id === deviceId) {
-            setScreenshotUrl(payload.url);
+          setScreenshotUrl(payload.url);
         }
+      }
     });
 
-    async function submit() {
-        if (!currentType) return;
-        await send(currentType as any, params);
+    return () => {
+      unsubscribe();
+    };
+  }, [deviceId]);
+
+  /* ---------------------------
+     Send command helper
+  ---------------------------- */
+
+  async function submit(type: string, params: any) {
+    try {
+      await send(type as any, params);
+      await loadCommands();
+    } catch (err) {
+      console.error("Failed to send command", err);
     }
+  }
 
-    if (loading) return <div className="p-6">Loading commands…</div>;
+  /* ---------------------------
+     Loading UI
+  ---------------------------- */
 
-    return (
+  if (loading) {
+    return <div className="p-6">Loading commands…</div>;
+  }
 
-        <div className="flex h-full">
-            <div className="flex flex-col h-full">
-                <CommandCreator deviceId={deviceId} />
-                <CommandList list={list} onSelect={setSelected} />
-            </div>
+  /* ---------------------------
+     Render
+  ---------------------------- */
 
-            <CommandOutput cmd={selected} />
+  return (
+    <div className="flex h-full">
 
-            {screenshotUrl && (
-                <ScreenshotViewer url={screenshotUrl} onClose={() => setScreenshotUrl(null)} />
-            )}
-        </div>
-    );
+      {/* LEFT PANEL */}
+      <div className="flex flex-col h-full w-96 border-r border-border">
 
-        <div className="space-y-6 p-6">
-            <h1 className="text-3xl font-bold">Remote Commands</h1>
+        <CommandCreator deviceId={deviceId} />
 
-            {!currentType && (
-                <CommandTypeSelector onSelect={choose} />
-            )}
+        <CommandList
+          list={list}
+          onSelect={setSelected}
+        />
 
-            {currentType && (
-                <CommandForm
-                    params={params}
-                    onChange={updateParam}
-                    onSend={submit}
-                />
-            )}
+      </div>
 
-            <h2 className="text-xl font-semibold mt-10">Command History</h2>
+      {/* RIGHT PANEL */}
+      <div className="flex flex-col flex-1">
 
-            {loading ? <div>Loading…</div> : <CommandHistory history={history} />}
-        </div>
-    );
+        <CommandOutput cmd={selected} />
+
+        {screenshotUrl && (
+          <ScreenshotViewer
+            url={screenshotUrl}
+            onClose={() => setScreenshotUrl(null)}
+          />
+        )}
+
+      </div>
+
+    </div>
+  );
 }

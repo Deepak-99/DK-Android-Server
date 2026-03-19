@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { body, param, query } = require('express-validator');
-const { validateRequest } = require('../../../middleware/validation');
-const screenshotController = require('../../../controllers/screenshotController');
-const { authorize } = require('../../../middleware/auth');
+const { validateRequest } = require('../middleware/validation');
+const screenshotController = require('../controllers/screenshotController');
+const { authorize } = require('../middleware/auth');
 
 // Get screenshots for a device
 router.get(

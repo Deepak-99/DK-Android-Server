@@ -1,4 +1,4 @@
-import { CommandDTO } from "@/types/commands";
+import { CommandDTO } from "../../types/commands";
 
 export default function CommandHistory({ history }: { history: CommandDTO[] }) {
     return (

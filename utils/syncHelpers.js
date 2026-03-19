@@ -1,49 +1,54 @@
-const { sequelize } = require('../config/database');
+'use strict';
+
 const logger = require('./logger');
 
 /**
- * Ensures the is_active column exists in the users table and sets default values
- * This should be called during server startup or before user operations
+ * Ensures the is_active column exists in the users table
+ * and sets default values if missing
  */
 async function ensureIsActiveColumn() {
   try {
-    // Check if the is_active column exists
-    const [results] = await sequelize.query(
-      `SELECT COLUMN_NAME 
-       FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = '${sequelize.config.database}' 
-       AND TABLE_NAME = 'users' 
-       AND COLUMN_NAME = 'is_active'`
-    );
+    // Lazy load to avoid circular dependency
+    const sequelize = require('../config/database');
 
-    if (results.length === 0) {
-      // Add the is_active column if it doesn't exist
-      logger.info('Adding is_active column to users table...');
-      await sequelize.query(
-        'ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE',
-        { raw: true }
-      );
-      logger.info('Successfully added is_active column to users table');
+    logger.info('[SYNC] Checking is_active column in users table');
+
+    const [results] = await sequelize.query(`
+      SHOW COLUMNS FROM users LIKE 'is_active';
+    `);
+
+    if (!results || results.length === 0) {
+
+      logger.info('[SYNC] is_active column missing → Adding column');
+
+      await sequelize.query(`
+        ALTER TABLE users 
+        ADD COLUMN is_active BOOLEAN DEFAULT true;
+      `);
+
+      logger.info('[SYNC] is_active column added successfully');
+
+    } else {
+
+      logger.info('[SYNC] is_active column already exists');
+
     }
 
-    // Ensure all existing users are marked as active
-    logger.info('Ensuring all users are marked as active...');
-    const [updateResult] = await sequelize.query(
-      'UPDATE users SET is_active = TRUE WHERE is_active IS NULL OR is_active = FALSE',
-      { raw: true }
-    );
-
-    logger.info(`Updated ${updateResult?.affectedRows || 0} users to be active`);
   } catch (error) {
-    logger.error('Error ensuring is_active column:', error);
-    throw error;
+
+    logger.error('[SYNC ERROR] Failed to ensure is_active column', {
+      message: error.message,
+      stack: error.stack
+    });
+
   }
 }
 
 /**
- * Middleware to ensure user is active
+ * Middleware to block inactive users
  */
 function ensureUserActive(req, res, next) {
+
   if (req.user && req.user.isActive === false) {
     return res.status(403).json({
       success: false,
@@ -51,6 +56,7 @@ function ensureUserActive(req, res, next) {
       code: 'ACCOUNT_INACTIVE'
     });
   }
+
   next();
 }
 

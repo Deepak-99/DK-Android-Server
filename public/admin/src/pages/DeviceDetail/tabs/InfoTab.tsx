@@ -1,3 +1,5 @@
+import {useDeviceDetail} from "../useDeviceDetail";
+
 export default function InfoTab({ deviceId }: { deviceId: string }) {
     const { info } = useDeviceDetail(deviceId);
 

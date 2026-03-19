@@ -2,6 +2,8 @@ import { createContext, useContext, ReactNode, useState, useEffect } from 'react
 import { useNavigate } from 'react-router-dom';
 import { login as authLogin, logout as authLogout } from '../services/auth';
 import { socket } from '../services/websocket';
+import { connect } from '../services/websocket';
+import { getToken } from '../utils/token';
 
 interface AuthContextType {
   user: any;
@@ -23,6 +25,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(JSON.parse(userData));
     }
   }, []);
+
+    useEffect(() => {
+        const token = getToken();
+        if (token) {
+            connect(); // 🔥 reconnect WS on reload
+        }
+    }, []);
 
   const login = async (email: string, password: string) => {
     try {

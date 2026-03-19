@@ -1,77 +1,79 @@
 const express = require('express');
 const router = express.Router();
-const { Location } = require('../config/database');
+
+const db = require('../models');
+const { Location, Device } = db;
+
 const { authenticateToken } = require('../middleware/auth');
 
-// Get all locations for a device
+/*
+---------------------------------------------
+Get locations
+---------------------------------------------
+*/
 router.get('/', authenticateToken, async (req, res) => {
+
   try {
+
     const { device_id } = req.query;
-    if (!device_id) {
-      return res.status(400).json({ error: 'Device ID is required' });
+
+    const device = await Device.findOne({
+      where: { device_id }
+    });
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
     }
-    
+
     const locations = await Location.findAll({
-      where: { device_id },
-      order: [['createdAt', 'DESC']]
+      where: { device_id: device.id },
+      order: [['created_at', 'DESC']]
     });
-    
+
     res.json(locations);
+
   } catch (error) {
-    console.error('Error fetching locations:', error);
-    res.status(500).json({ error: 'Failed to fetch locations' });
+
+    res.status(500).json({
+      error: 'Failed to fetch locations'
+    });
+
   }
+
 });
 
-// Add a new location
+/*
+---------------------------------------------
+Add location
+---------------------------------------------
+*/
 router.post('/', authenticateToken, async (req, res) => {
-  try {
-    const { device_id, latitude, longitude, accuracy, altitude, speed, heading, timestamp } = req.body;
-    
-    if (!device_id || !latitude || !longitude) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    const location = await Location.create({
-      device_id,
-      latitude,
-      longitude,
-      accuracy,
-      altitude,
-      speed,
-      heading,
-      timestamp: timestamp || new Date()
-    });
-    
-    res.status(201).json(location);
-  } catch (error) {
-    console.error('Error saving location:', error);
-    res.status(500).json({ error: 'Failed to save location' });
-  }
-});
 
-// Get latest location for a device
-router.get('/latest', authenticateToken, async (req, res) => {
   try {
-    const { device_id } = req.query;
-    if (!device_id) {
-      return res.status(400).json({ error: 'Device ID is required' });
-    }
-    
-    const location = await Location.findOne({
-      where: { device_id },
-      order: [['timestamp', 'DESC']]
+
+    const device = await Device.findOne({
+      where: { device_id: req.body.device_id }
     });
-    
-    if (!location) {
-      return res.status(404).json({ error: 'No location data found' });
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
     }
-    
-    res.json(location);
+
+    const location = await Location.create({
+      device_id: device.id,
+      ...req.body
+    });
+
+    res.status(201).json(location);
+
   } catch (error) {
-    console.error('Error fetching latest location:', error);
-    res.status(500).json({ error: 'Failed to fetch latest location' });
+
+    res.status(500).json({
+      error: 'Failed to save location'
+    });
+
   }
+
 });
 
 module.exports = router;

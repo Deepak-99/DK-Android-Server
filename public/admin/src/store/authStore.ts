@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { saveToken, clearToken, getToken } from "@/utils/token";
-import { verifySession } from "@/api/auth";
+import { verifySession } from "../api/auth";
 
 interface AuthState {
     token: string | null;

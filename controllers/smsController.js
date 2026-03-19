@@ -1,11 +1,24 @@
-const { Sms, Device } = require('../../../models');
+const { Sms, Device } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 
-/**
- * Sync SMS messages from device to server
- */
+/* -------------------------------------------------------
+ Helper: Pagination
+------------------------------------------------------- */
+
+function normalizePagination(page, limit) {
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 50;
+    const offset = (pageNum - 1) * limitNum;
+
+    return { pageNum, limitNum, offset };
+}
+
+/* -------------------------------------------------------
+ Sync SMS
+------------------------------------------------------- */
+
 exports.syncSms = async (req, res) => {
     try {
         const { deviceId } = req.params;
@@ -31,6 +44,7 @@ exports.syncSms = async (req, res) => {
 
         // Process messages in batches
         const BATCH_SIZE = 50;
+
         const results = {
             created: 0,
             updated: 0,
@@ -40,52 +54,44 @@ exports.syncSms = async (req, res) => {
 
         for (let i = 0; i < messages.length; i += BATCH_SIZE) {
             const batch = messages.slice(i, i + BATCH_SIZE);
-            const batchPromises = batch.map(message => 
-                processSms(deviceId, message).catch(error => {
-                    logger.error(`[${requestId}] Error processing SMS:`, error);
-                    return { error: error.message };
-                })
+
+            const batchResults = await Promise.all(
+                batch.map(m =>
+                    processSms(deviceId, m).catch(err => {
+                        logger.error(`[${requestId}] SMS sync error`, err);
+                        return { error: err.message };
+                    })
+                )
             );
 
-            const batchResults = await Promise.all(batchPromises);
-            
-            batchResults.forEach(result => {
-                if (result && !result.error) {
-                    if (result.wasNew) results.created++;
-                    else results.updated++;
-                } else {
+            batchResults.forEach(r => {
+                if (r?.error) {
                     results.failed++;
-                    if (result?.error) {
-                        results.errors.push(result.error);
-                    }
+                    results.errors.push(r.error);
+                } else if (r.wasNew) {
+                    results.created++;
+                } else {
+                    results.updated++;
                 }
             });
         }
 
-        logger.info(`[${requestId}] Synced ${messages.length} SMS messages for device ${deviceId}: ${results.created} created, ${results.updated} updated, ${results.failed} failed`);
-
-        return res.json({
-            success: true,
-            data: results
-        });
+        return res.json({ success: true, data: results });
 
     } catch (error) {
-        logger.error('Error syncing SMS messages:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to sync SMS messages',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+        logger.error('SMS sync failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to sync SMS' });
     }
 };
 
-/**
- * Process a single SMS message (create or update)
- */
+/* -------------------------------------------------------
+ Process Single SMS
+------------------------------------------------------- */
+
 async function processSms(deviceId, message) {
     // Validate required fields
     if (!message.messageId || !message.address || !message.body || !message.type || !message.date) {
-        throw new Error('Missing required SMS message fields');
+        throw new Error('Missing required SMS fields');
     }
 
     const [sms, created] = await Sms.findOrCreate({
@@ -94,53 +100,62 @@ async function processSms(deviceId, message) {
             messageId: message.messageId
         },
         defaults: {
-            ...message,
+            id: uuidv4(),
             deviceId,
-            id: uuidv4()
+            messageId: message.messageId,
+            address: message.address,
+            body: message.body,
+            type: message.type,
+            threadId: message.threadId || null,
+            date: new Date(message.date),
+            isRead: message.isRead || false
         }
     });
 
     if (!created) {
-        await sms.update(message);
+        await sms.update({
+            body: message.body,
+            isRead: message.isRead ?? sms.isRead,
+            type: message.type
+        });
     }
 
-    return { wasNew: created, sms };
+    return { wasNew: created };
 }
 
-/**
- * Get SMS messages with filtering and pagination
- */
+/* -------------------------------------------------------
+ Get SMS Messages
+------------------------------------------------------- */
+
 exports.getSmsMessages = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            type, 
+        const {
+            type,
             threadId,
             address,
             search,
-            startDate, 
-            endDate, 
+            startDate,
+            endDate,
             read,
-            page = 1, 
-            limit = 50 
+            page,
+            limit
         } = req.query;
 
-        // Build where clause
+        const { pageNum, limitNum, offset } = normalizePagination(page, limit);
+
         const where = { deviceId };
-        
-        // Filter by message type
-        if (type) {
-            where.type = type; // 'inbox', 'sent', 'draft', 'outbox', 'failed', 'queued'
+
+        if (type) where.type = type;
+        if (threadId) where.threadId = threadId;
+        if (address) where.address = address;
+
+        if (read !== undefined) {
+            where.isRead = read === 'true';
         }
 
-        // Filter by thread/conversation
-        if (threadId) {
-            where.threadId = threadId;
-        }
-
-        // Filter by phone number
-        if (address) {
-            where.address = address;
+        if (search) {
+            where.body = { [Op.like]: `%${search}%` };
         }
 
         // Filter by date range
@@ -150,22 +165,11 @@ exports.getSmsMessages = async (req, res) => {
             if (endDate) where.date[Op.lte] = new Date(endDate);
         }
 
-        // Filter by read status
-        if (read !== undefined) {
-            where.isRead = read === 'true';
-        }
-
-        // Search in message body
-        if (search) {
-            where.body = { [Op.like]: `%${search}%` };
-        }
-
-        // Execute query with pagination
         const { count, rows } = await Sms.findAndCountAll({
             where,
             order: [['date', 'DESC']],
-            limit: parseInt(limit),
-            offset: (page - 1) * limit
+            limit: limitNum,
+            offset
         });
 
         return res.json({
@@ -173,123 +177,67 @@ exports.getSmsMessages = async (req, res) => {
             data: rows,
             pagination: {
                 total: count,
-                page: parseInt(page),
-                totalPages: Math.ceil(count / limit)
+                page: pageNum,
+                totalPages: Math.ceil(count / limitNum)
             }
         });
 
     } catch (error) {
-        logger.error('Error fetching SMS messages:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch SMS messages'
-        });
+        logger.error('Fetch SMS failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch SMS' });
     }
 };
 
-/**
- * Get SMS conversations/threads
- */
+/* -------------------------------------------------------
+ Get SMS Threads
+------------------------------------------------------- */
+
 exports.getSmsThreads = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { search, page = 1, limit = 50 } = req.query;
 
-        // Build where clause
-        const where = { deviceId };
-
-        // Search in message body or address
-        if (search) {
-            where[Op.or] = [
-                { body: { [Op.like]: `%${search}%` } },
-                { address: { [Op.like]: `%${search}%` } }
-            ];
-        }
-
-        // Get unique threads with latest message
         const threads = await Sms.findAll({
             attributes: [
                 'threadId',
                 'address',
-                [Sms.sequelize.fn('MAX', Sms.sequelize.col('date')), 'lastMessageDate'],
-                [Sms.sequelize.fn('COUNT', Sms.sequelize.col('id')), 'messageCount'],
-                [Sms.sequelize.literal(`
-                    (SELECT body FROM sms 
-                     WHERE (threadId = sms.threadId AND deviceId = :deviceId) 
-                     ORDER BY date DESC LIMIT 1)
-                `), 'snippet'],
-                [Sms.sequelize.literal(`
-                    (SELECT COUNT(*) FROM sms as unread 
-                     WHERE unread.threadId = sms.threadId 
-                     AND unread.deviceId = :deviceId 
-                     AND unread.isRead = false)
-                `), 'unreadCount']
+                [Sms.sequelize.fn('MAX', Sms.sequelize.col('date')), 'lastDate'],
+                [Sms.sequelize.fn('COUNT', Sms.sequelize.col('id')), 'count']
             ],
-            where,
+            where: { deviceId },
             group: ['threadId', 'address'],
-            order: [[Sms.sequelize.literal('"lastMessageDate"'), 'DESC']],
-            limit: parseInt(limit),
-            offset: (page - 1) * limit,
-            replacements: { deviceId },
+            order: [[Sms.sequelize.literal('lastDate'), 'DESC']],
             raw: true
         });
 
-        // Get total count of threads
-        const totalThreads = await Sms.count({
-            distinct: true,
-            col: 'threadId',
-            where
-        });
-
-        return res.json({
-            success: true,
-            data: threads,
-            pagination: {
-                total: totalThreads,
-                page: parseInt(page),
-                totalPages: Math.ceil(totalThreads / limit)
-            }
-        });
+        return res.json({ success: true, data: threads });
 
     } catch (error) {
-        logger.error('Error fetching SMS threads:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch SMS threads'
-        });
+        logger.error('Fetch SMS threads failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch threads' });
     }
 };
 
-/**
- * Get messages in a specific thread
- */
+/* -------------------------------------------------------
+ Thread Messages
+------------------------------------------------------- */
+
 exports.getThreadMessages = async (req, res) => {
     try {
         const { deviceId, threadId } = req.params;
-        const { page = 1, limit = 100 } = req.query;
+        const { page, limit } = req.query;
 
-        // Get messages in the thread
+        const { pageNum, limitNum, offset } = normalizePagination(page, limit);
+
         const { count, rows } = await Sms.findAndCountAll({
-            where: {
-                deviceId,
-                threadId
-            },
-            order: [['date', 'ASC']], // Oldest first for conversation view
-            limit: parseInt(limit),
-            offset: (page - 1) * limit
+            where: { deviceId, threadId },
+            order: [['date', 'ASC']],
+            limit: limitNum,
+            offset
         });
 
-        // Mark messages as read
         await Sms.update(
             { isRead: true },
-            {
-                where: {
-                    deviceId,
-                    threadId,
-                    isRead: false,
-                    type: 'inbox' // Only mark received messages as read
-                }
-            }
+            { where: { deviceId, threadId, isRead: false, type: 'inbox' } }
         );
 
         return res.json({
@@ -297,23 +245,21 @@ exports.getThreadMessages = async (req, res) => {
             data: rows,
             pagination: {
                 total: count,
-                page: parseInt(page),
-                totalPages: Math.ceil(count / limit)
+                page: pageNum,
+                totalPages: Math.ceil(count / limitNum)
             }
         });
 
     } catch (error) {
-        logger.error('Error fetching thread messages:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch thread messages'
-        });
+        logger.error('Thread fetch failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch thread' });
     }
 };
 
-/**
- * Send a new SMS message
- */
+/* -------------------------------------------------------
+ Send SMS
+------------------------------------------------------- */
+
 exports.sendSms = async (req, res) => {
     try {
         const { deviceId } = req.params;
@@ -321,10 +267,7 @@ exports.sendSms = async (req, res) => {
 
         // Validate input
         if (!address || !body) {
-            return res.status(400).json({
-                success: false,
-                error: 'Address and body are required'
-            });
+            return res.status(400).json({ success: false, error: 'Address and body required' });
         }
 
         // Create new outbound SMS
@@ -333,8 +276,8 @@ exports.sendSms = async (req, res) => {
             deviceId,
             address,
             body,
-            threadId: threadId || uuidv4(), // Create new thread if not provided
-            type: 'outbox', // Will be updated to 'sent' when device confirms delivery
+            threadId: threadId || uuidv4(),
+            type: 'outbox',
             status: 'pending',
             date: new Date(),
             isRead: true
@@ -342,24 +285,18 @@ exports.sendSms = async (req, res) => {
 
         // TODO: Queue the message for sending to the device
         // await queueSmsForSending(deviceId, sms.id);
-
-        return res.status(201).json({
-            success: true,
-            data: sms
-        });
+        return res.status(201).json({ success: true, data: sms });
 
     } catch (error) {
-        logger.error('Error sending SMS:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to send SMS'
-        });
+        logger.error('Send SMS failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to send SMS' });
     }
 };
 
-/**
- * Delete SMS messages
- */
+/* -------------------------------------------------------
+ Delete SMS
+------------------------------------------------------- */
+
 exports.deleteSms = async (req, res) => {
     try {
         const { deviceId } = req.params;
@@ -375,100 +312,49 @@ exports.deleteSms = async (req, res) => {
 
         // Build where clause
         const where = { deviceId };
-        
+
         if (!all) {
-            if (threadId) {
-                where.threadId = threadId;
-            } else {
-                where.id = { [Op.in]: messageIds };
-            }
+            if (threadId) where.threadId = threadId;
+            else where.id = { [Op.in]: messageIds };
         }
 
-        // Delete messages
-        const deletedCount = await Sms.destroy({ where });
+        const deleted = await Sms.destroy({ where });
 
-        return res.json({
-            success: true,
-            message: `Deleted ${deletedCount} messages`
-        });
+        return res.json({ success: true, message: `Deleted ${deleted} messages` });
 
     } catch (error) {
-        logger.error('Error deleting messages:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to delete messages'
-        });
+        logger.error('Delete SMS failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to delete SMS' });
     }
 };
 
-/**
- * Get SMS statistics
- */
+/* -------------------------------------------------------
+ SMS Statistics
+------------------------------------------------------- */
+
 exports.getSmsStatistics = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { startDate, endDate } = req.query;
 
-        // Build where clause
-        const where = { deviceId };
-        
-        if (startDate || endDate) {
-            where.date = {};
-            if (startDate) where.date[Op.gte] = new Date(startDate);
-            if (endDate) where.date[Op.lte] = new Date(endDate);
-        }
+        const totalMessages = await Sms.count({ where: { deviceId } });
 
-        // Get total message count
-        const totalMessages = await Sms.count({ where });
-
-        // Get message count by type
-        const messagesByType = await Sms.findAll({
+        const byType = await Sms.findAll({
             attributes: [
                 'type',
                 [Sms.sequelize.fn('COUNT', Sms.sequelize.col('id')), 'count']
             ],
-            where,
-            group: ['type']
-        });
-
-        // Get most messaged contacts
-        const mostMessaged = await Sms.findAll({
-            attributes: [
-                'address',
-                [Sms.sequelize.fn('COUNT', Sms.sequelize.col('id')), 'messageCount']
-            ],
-            where,
-            group: ['address'],
-            order: [[Sms.sequelize.literal('"messageCount"'), 'DESC']],
-            limit: 10
-        });
-
-        // Get message frequency by day
-        const messageFrequency = await Sms.findAll({
-            attributes: [
-                [Sms.sequelize.fn('DATE_TRUNC', 'day', Sms.sequelize.col('date')), 'day'],
-                [Sms.sequelize.fn('COUNT', Sms.sequelize.col('id')), 'count']
-            ],
-            where,
-            group: [Sms.sequelize.fn('DATE_TRUNC', 'day', Sms.sequelize.col('date'))],
-            order: [[Sms.sequelize.fn('DATE_TRUNC', 'day', Sms.sequelize.col('date')), 'ASC']]
+            where: { deviceId },
+            group: ['type'],
+            raw: true
         });
 
         return res.json({
             success: true,
-            data: {
-                totalMessages,
-                messagesByType,
-                mostMessaged,
-                messageFrequency
-            }
+            data: { totalMessages, byType }
         });
 
     } catch (error) {
-        logger.error('Error fetching SMS statistics:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch SMS statistics'
-        });
+        logger.error('SMS stats failed', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch SMS stats' });
     }
 };

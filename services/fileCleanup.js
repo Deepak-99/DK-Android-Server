@@ -1,7 +1,7 @@
 // services/fileCleanup.js
 const cron = require('node-cron');
 const storage = require('../utils/storage');
-const config = require('../config');
+const config = require('../config/config');
 
 class FileCleanupService {
     constructor() {

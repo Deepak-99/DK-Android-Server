@@ -1,49 +1,143 @@
-import { io, Socket } from 'socket.io-client';
+type WSStatus =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected";
 
-class WebSocketService {
-    private socket: Socket | null = null;
-    private static instance: WebSocketService;
+export let socket: WebSocket | null = null;
 
-    private constructor() {
-        this.socket = io(import.meta.env.VITE_WS_URL || 'ws://localhost:3000', {
-            auth: {
-                token: localStorage.getItem('token'),
-            },
-            autoConnect: false,
-        });
+let reconnectAttempts = 0;
+let reconnectTimer: number | null = null;
+
+const listeners = new Set<(data: any) => void>();
+const statusListeners = new Set<(s: WSStatus) => void>();
+
+const MAX_DELAY = 30000;
+
+const getWSUrl = () => {
+
+  const protocol =
+    location.protocol === "https:" ? "wss" : "ws";
+
+  const token =
+    localStorage.getItem("token");
+
+  return `${protocol}://${location.host}/ws/command?token=${token}`;
+};
+
+const notify = (s: WSStatus) => {
+
+  statusListeners.forEach(cb => cb(s));
+};
+
+export function connect() {
+
+  if (
+    socket &&
+    (
+      socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING
+    )
+  )
+    return;
+
+  notify("connecting");
+
+  socket = new WebSocket(getWSUrl());
+
+  socket.onopen = () => {
+
+    reconnectAttempts = 0;
+
+    notify("connected");
+  };
+
+  socket.onmessage = e => {
+
+    try {
+
+      const data = JSON.parse(e.data);
+
+      listeners.forEach(cb => cb(data));
+
+    } catch (err) {
+
+      console.warn("WS parse error", err);
     }
+  };
 
-    public static getInstance(): WebSocketService {
-        if (!WebSocketService.instance) {
-            WebSocketService.instance = new WebSocketService();
-        }
-        return WebSocketService.instance;
-    }
+  socket.onclose = () => {
 
-    public connect() {
-        if (!this.socket?.connected) {
-            this.socket?.connect();
-        }
-    }
+    notify("disconnected");
 
-    public disconnect() {
-        if (this.socket?.connected) {
-            this.socket.disconnect();
-        }
-    }
+    scheduleReconnect();
+  };
 
-    public on(event: string, callback: (...args: any[]) => void) {
-        this.socket?.on(event, callback);
-        return () => this.socket?.off(event, callback);
-    }
+  socket.onerror = () => {
 
-    public off(event: string, callback?: (...args: any[]) => void) {
-        this.socket?.off(event, callback);
-    }
-
-    public emit(event: string, ...args: any[]) {
-        this.socket?.emit(event, ...args);
-    }
+    socket?.close();
+  };
 }
 
-export const socket = WebSocketService.getInstance();
+function scheduleReconnect() {
+
+  if (reconnectTimer) return;
+
+  const delay = Math.min(
+    1000 * 2 ** reconnectAttempts++,
+    MAX_DELAY
+  );
+
+  notify("reconnecting");
+
+  reconnectTimer = window.setTimeout(() => {
+
+    reconnectTimer = null;
+
+    connect();
+
+  }, delay);
+}
+
+export function disconnect() {
+
+  reconnectTimer &&
+    clearTimeout(reconnectTimer);
+
+  reconnectTimer = null;
+
+  socket?.close();
+
+  socket = null;
+}
+
+export function wsEmit(
+  type: string,
+  payload?: any
+) {
+
+  if (!socket || socket.readyState !== WebSocket.OPEN)
+    return;
+
+  socket.send(
+    JSON.stringify({ type, payload })
+  );
+}
+
+export function subscribe(
+  cb: (data: any) => void
+) {
+
+  listeners.add(cb);
+
+  return () => listeners.delete(cb);
+}
+
+export function subscribeStatus(
+  cb: (s: WSStatus) => void
+) {
+
+  statusListeners.add(cb);
+
+  return () => statusListeners.delete(cb);
+}

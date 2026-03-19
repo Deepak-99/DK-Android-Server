@@ -1,8 +1,12 @@
-import { Device } from "@/services/devicesApi";
+import { Device } from "../../services/devicesApi";
 import * as Icons from "lucide-react";
 import { Link } from "react-router-dom";
 
-export default function DeviceCard({ device }: { device: Device & { live: string } }) {
+export default function DeviceCard({
+    device
+}: {
+    device: Device & { live: string };
+}) {
     return (
         <Link
             to={`/devices/${device.id}`}
@@ -12,7 +16,9 @@ export default function DeviceCard({ device }: { device: Device & { live: string
                 <div className="flex items-center space-x-3">
                     <Icons.Phone className="w-7 h-7 text-accent" />
                     <div>
-                        <div className="font-semibold text-text">{device.nickname || device.name}</div>
+                        <div className="font-semibold text-text">
+                            {device.nickname || device.name}
+                        </div>
                         <div className="text-sm text-text-dim">
                             {device.manufacturer} {device.model}
                         </div>
@@ -21,7 +27,9 @@ export default function DeviceCard({ device }: { device: Device & { live: string
 
                 <div
                     className={`w-3 h-3 rounded-full ${
-                        device.live === "online" ? "bg-green-500" : "bg-red-500"
+                        device.live === "online"
+                            ? "bg-green-500"
+                            : "bg-red-500"
                     }`}
                 />
             </div>

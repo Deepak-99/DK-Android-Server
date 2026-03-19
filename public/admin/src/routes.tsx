@@ -1,13 +1,14 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
-import Layout from './components/common/Layout';
+import Layout from '../components/common/Layout';
 import { useAuth } from './contexts/AuthContext';
 
 // Lazy load components
 const Login = lazy(() => import('./pages/auth/Login'));
 const Dashboard = lazy(() => import('./pages/dashboard'));
 const DeviceDetails = lazy(() => import('./pages/devices/[id]'));
+const ScreenStudio = lazy(() => import('./pages/screen/ScreenStudioPage'));
 
 const Loading = () => (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -17,9 +18,7 @@ const Loading = () => (
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
     const { isAuthenticated } = useAuth();
-    if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
-    }
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
     return children;
 };
 
@@ -37,10 +36,13 @@ const AppRoutes = () => {
                     }
                 >
                     <Route index element={<Dashboard />} />
+
                     <Route path="devices">
                         <Route index element={<Dashboard />} />
                         <Route path=":id" element={<DeviceDetails />} />
+                        <Route path=":id/screen-studio" element={<ScreenStudio />} />
                     </Route>
+
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

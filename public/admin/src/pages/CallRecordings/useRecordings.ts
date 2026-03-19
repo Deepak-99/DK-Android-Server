@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { recordingsApi } from "@/services/recordingsApi";
+import { recordingsApi } from "../../services/recordingsApi";
 import { CallRecording } from "./types";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useWebSocket } from "../../hooks/useWebSocket";
 
 export function useRecordings(deviceId: string) {
   const [items, setItems] = useState<CallRecording[]>([]);
@@ -17,7 +17,7 @@ export function useRecordings(deviceId: string) {
   useEffect(() => { load(); }, [deviceId]);
 
   useWebSocket("call.recording.new", (rec: CallRecording) => {
-    if (rec.device_id === deviceId) {
+    if (rec.deviceId === deviceId) {
       setItems(prev => [rec, ...prev]);
     }
   });

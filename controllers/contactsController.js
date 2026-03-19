@@ -1,111 +1,390 @@
-const { Contact, Device } = require("../config/database");
-const { Op } = require("sequelize");
+const { Contact, Device } = require('../models');
+const { Op } = require('sequelize');
+const logger = require('../utils/logger');
+const { v4: uuidv4 } = require('uuid');
+const { createCard } = require('vcard-creator');
 
-module.exports = {
+const {
+    serverError,
+    parsePagination
+} = require('../utils/controllerHelpers');
 
-   list: async (req, res) => {
-     try {
-       const device = await Device.findOne({ where: { device_id: req.params.deviceId } });
-       if (!device) return res.status(404).json({ success: false, error: "Device not found" });
+/* ------------------------------------------------------------------
+ * Shared helpers
+ * ------------------------------------------------------------------ */
 
-       const rows = await Contact.findAll({ where: { device_id: device.id }, order: [["name", "ASC"]] });
-       res.json(rows);
-     } catch (e) {
-       console.error("Contacts list error:", e);
-       res.status(500).json({ success: false, error: "Server error" });
-     }
-   },
+function getSafeJobTitle(contact) {
+    return (
+        contact.jobTitle ||
+        contact.organization?.title ||
+        contact.organization ||
+        ''
+    );
+}
 
-   create: async (req, res) => {
-     try {
-       const device = await Device.findOne({ where: { device_id: req.params.deviceId } });
-       if (!device) return res.status(404).json({ success: false, error: "Device not found" });
+/* ------------------------------------------------------------------
+ * Sync contacts from device
+ * ------------------------------------------------------------------ */
 
-       const contact = await Contact.create({
-         device_id: device.id,
-         name: req.body.name,
-         phones: req.body.phones || [],
-         emails: req.body.emails || [],
-         organization: req.body.organization || "",
-         notes: req.body.notes || ""
-       });
+exports.syncContacts = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const { contacts } = req.body;
+        const requestId = req.requestId || 'unknown';
 
-       res.json({ success: true, data: contact });
-     } catch (e) {
-       console.error("Create contact error:", e);
-       res.status(500).json({ success: false, error: "Server error" });
-     }
-   },
+        // Validate input
+        if (!Array.isArray(contacts)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Contacts must be an array'
+            });
+        }
 
-   update: async (req, res) => {
-     try {
-       const contact = await Contact.findByPk(req.params.id);
-       if (!contact) return res.status(404).json({ success: false, error: "Contact not found" });
+        // Check if device exists
+        const device = await Device.findByPk(deviceId);
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                error: 'Device not found'
+            });
+        }
 
-       await contact.update({
-         name: req.body.name,
-         phones: req.body.phones,
-         emails: req.body.emails,
-         organization: req.body.organization,
-         notes: req.body.notes
-       });
+        // Process contacts in batches
+        const BATCH_SIZE = 50;
 
-       res.json({ success: true, data: contact });
-     } catch (e) {
-       console.error("Update contact error:", e);
-       res.status(500).json({ success: false, error: "Server error" });
-     }
-   },
+        const results = {
+            created: 0,
+            updated: 0,
+            failed: 0,
+            errors: []
+        };
 
-   delete: async (req, res) => {
-     try {
-       const removed = await Contact.destroy({ where: { id: req.params.id } });
-       res.json({ success: true, removed });
-     } catch (e) {
-       console.error("Delete contact error:", e);
-       res.status(500).json({ success: false, error: "Server error" });
-     }
-   },
+        for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+            const batch = contacts.slice(i, i + BATCH_SIZE);
 
-   export: async (req, res) => {
-     try {
-      const { deviceId } = req.params;
-      const device = await Device.findOne({ where: { device_id: deviceId } });
-       if (!device) return res.status(404).json({ success: false, error: "Device not found" });
+            const batchResults = await Promise.all(
+                batch.map(contact =>
+                    processContact(deviceId, contact).catch(err => {
+                        logger.error(`[${requestId}] Contact sync failed`, err);
+                        return { error: err.message };
+                    })
+                )
+            );
 
-       const contacts = await Contact.findAll({ where: { device_id: device.id } });
+            batchResults.forEach(result => {
+                if (result?.error) {
+                    results.failed++;
+                    results.errors.push(result.error);
+                } else if (result.wasNew) {
+                    results.created++;
+                } else {
+                    results.updated++;
+                }
+            });
+        }
 
-       if (req.query.format === "csv") {
-        let csv = "name,phones,emails,organization,notes\n";
-         contacts.forEach(c => {
-           csv += `"${c.name}","${(c.phones || []).join(";")}","${(c.emails || []).join(";")}","${c.organization}","${c.notes}"\n`;
-         });
+        logger.info(`[${requestId}] Synced ${contacts.length} contacts for ${deviceId}`);
 
-         res.setHeader("Content-Disposition", `attachment; filename=contacts_${deviceId}.csv`);
-         res.setHeader("Content-Type", "text/csv");
-        return res.send(csv);
-      }
+        return res.json({
+            success: true,
+            data: results
+        });
 
-      if (req.query.format === "vcf") {
-         let vcf = "";
-         contacts.forEach(c => {
-          vcf += "BEGIN:VCARD\nVERSION:3.0\n";
-           vcf += `FN:${c.name}\n`;
-           (c.phones || []).forEach(p => vcf += `TEL:${p}\n`);
-           (c.emails || []).forEach(e => vcf += `EMAIL:${e}\n`);
-           if (c.organization) vcf += `ORG:${c.organization}\n`;
-           if (c.notes) vcf += `NOTE:${c.notes}\n`;
-           vcf += "END:VCARD\n";
-         });
+    } catch (error) {
+        return serverError(res, logger, 'Failed to sync contacts', error);
+    }
+};
 
-         res.setHeader("Content-Type", "text/vcard");
-        return res.send(vcf);
-      }
+/* ------------------------------------------------------------------
+ * Single contact processor
+ * ------------------------------------------------------------------ */
 
-      res.status(400).json({ success: false, error: "Format not supported" });
-     } catch (e) {
-       console.error("Export contacts error:", e);
-       res.status(500).json({ success: false, error: "Server error" });
-     }
-   }
- };
+async function processContact(deviceId, contact) {
+    // Validate required fields
+    if (!contact.contactId || !contact.displayName) {
+        throw new Error('Missing required contact fields');
+    }
+
+    const [savedContact, created] = await Contact.findOrCreate({
+        where: {
+            deviceId,
+            contactId: contact.contactId
+        },
+        defaults: {
+            ...contact,
+            id: uuidv4(),
+            deviceId
+        }
+    });
+
+    if (!created) {
+
+        const safeUpdate = {
+            displayName: contact.displayName,
+            phoneNumbers: contact.phoneNumbers || [],
+            emails: contact.emails || [],
+            addresses: contact.addresses || [],
+            organization: contact.organization || null,
+            note: contact.note || null,
+            jobTitle: contact.jobTitle || null,
+            groups: contact.groups || []
+        };
+
+        await savedContact.update(safeUpdate);
+    }
+
+    return { wasNew: created };
+}
+
+/* ------------------------------------------------------------------
+ * Get contacts (filter + pagination)
+ * ------------------------------------------------------------------ */
+
+exports.getContacts = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const {
+            search,
+            group,
+            hasPhone,
+            hasEmail,
+            page,
+            limit
+        } = req.query;
+
+        const { pageNum, limitNum, offset } = parsePagination(page, limit);
+
+        const where = { deviceId };
+
+        // Search by name, email, or phone
+        if (search) {
+            where[Op.or] = [
+                { displayName: { [Op.iLike]: `%${search}%` } }
+            ];
+        }
+
+        // Filter by group
+        if (group) {
+            where.groups = {
+                [Op.contains]: [group]
+            };
+        }
+
+        // Filter by contact type
+        if (hasPhone === 'true') {
+            where.phoneNumbers = {
+                [Op.not]: null
+            };
+        }
+
+        if (hasEmail === 'true') {
+            where.emails = {
+                [Op.not]: null
+            };
+        }
+
+        // Execute query with pagination
+        const { count, rows } = await Contact.findAndCountAll({
+            where,
+            order: [['displayName', 'ASC']],
+            limit: limitNum,
+            offset
+        });
+
+        return res.json({
+            success: true,
+            data: rows,
+            pagination: {
+                total: count,
+                page: pageNum,
+                totalPages: Math.ceil(count / limitNum)
+            }
+        });
+
+    } catch (error) {
+        return serverError(res, logger, 'Failed to fetch contacts', error);
+    }
+};
+
+/* ------------------------------------------------------------------
+ * Contact statistics
+ * ------------------------------------------------------------------ */
+
+exports.getContactStatistics = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        const totalContacts = await Contact.count({
+            where: { deviceId }
+        });
+
+        const withPhone = await Contact.count({
+            where: {
+                deviceId,
+                phoneNumbers: { [Op.not]: null }
+            }
+        });
+
+        const withEmail = await Contact.count({
+            where: {
+                deviceId,
+                emails: { [Op.not]: null }
+            }
+        });
+
+        // Get contact groups
+        const groups = await Contact.findAll({
+            attributes: [
+                [
+                    Contact.sequelize.fn(
+                        'DISTINCT',
+                        Contact.sequelize.fn(
+                            'jsonb_array_elements_text',
+                            Contact.sequelize.col('groups')
+                        )
+                    ),
+                    'group'
+                ]
+            ],
+            where: {
+                deviceId,
+                groups: { [Op.ne]: null }
+            },
+            raw: true
+        });
+
+        return res.json({
+            success: true,
+            data: {
+                totalContacts,
+                byAccountType,
+                withPhone,
+                withEmail,
+                groups: groups.map(g => g.group).filter(Boolean)
+            }
+        });
+
+    } catch (error) {
+        return serverError(res, logger, 'Failed to fetch contact statistics', error);
+    }
+};
+
+/* ------------------------------------------------------------------
+ * Delete contacts
+ * ------------------------------------------------------------------ */
+
+exports.deleteContacts = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const { contactIds, all = false } = req.body;
+
+        if (!all && (!Array.isArray(contactIds) || !contactIds.length)) {
+            return res.status(400).json({
+                success: false,
+                error: 'No contact IDs provided'
+            });
+        }
+
+        // Build where clause
+        const where = { deviceId };
+
+        if (!all) {
+            where.id = { [Op.in]: contactIds };
+        }
+
+        // Delete contacts
+        const deletedCount = await Contact.destroy({ where });
+
+        return res.json({
+            success: true,
+            message: `Deleted ${deletedCount} contacts`
+        });
+
+    } catch (error) {
+        return serverError(res, logger, 'Failed to delete contacts', error);
+    }
+};
+
+/* ------------------------------------------------------------------
+ * Export contacts
+ * ------------------------------------------------------------------ */
+
+exports.exportContacts = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        const { format = 'vcard' } = req.query;
+
+        // Get all contacts for the device
+        const contacts = await Contact.findAll({
+            where: { deviceId },
+            order: [['displayName', 'ASC']]
+        });
+
+        let data;
+        let contentType;
+
+        let fileName =
+            `contacts_${deviceId}_${new Date().toISOString().split('T')[0]}`;
+
+        switch (format.toLowerCase()) {
+
+            case 'csv': {
+                const { Parser } = require('json2csv');
+                const parser = new Parser();
+                data = parser.parse(contacts);
+                contentType = 'text/csv';
+                fileName += '.csv';
+                break;
+            }
+
+            case 'vcard': {
+
+                data = contacts.map(contact => {
+
+                    const card = createCard();
+
+                    card
+                        .addName(
+                            contact.name?.lastName || '',
+                            contact.name?.firstName || ''
+                        )
+                        .addCompany(contact.organization || '')
+                        .addJobtitle(getSafeJobTitle(contact))
+                        .addNote(contact.note || '');
+
+                    contact.phoneNumbers?.forEach(p =>
+                        card.addPhoneNumber(p.value, p.type || 'WORK')
+                    );
+
+                    contact.emails?.forEach(e =>
+                        card.addEmail(e.value, e.type || 'WORK')
+                    );
+
+                    return card.toString();
+
+                }).join('\n\n');
+
+                contentType = 'text/vcard';
+                fileName += '.vcf';
+                break;
+            }
+
+            default:
+                data = JSON.stringify(contacts, null, 2);
+                contentType = 'application/json';
+                fileName += '.json';
+        }
+
+        // Set headers and send file
+        res.setHeader('Content-Type', contentType);
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename=${fileName}`
+        );
+
+        return res.send(data);
+
+    } catch (error) {
+        return serverError(res, logger, 'Failed to export contacts', error);
+    }
+};

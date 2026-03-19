@@ -547,122 +547,46 @@ module.exports = (sequelize) => {
     underscored: false,
     timestamps: true,
     indexes: [
-      {
-        name: 'sms_deviceId',
-        fields: ['deviceId']
-      },
-      {
-        name: 'sms_sms_id_deviceId',
-        fields: ['smsId', 'deviceId'],
-        unique: true
-      },
-      {
-        name: 'sms_address',
-        fields: ['address']
-      },
-      {
-        name: 'sms_date',
-        fields: ['date']
-      },
-      {
-        name: 'sms_thread_id',
-        fields: ['threadId']
-      },
-      {
-        name: 'idx_sms_thread_id',
-        fields: ['threadId']
-      },
-      {
-        name: 'idx_sms_sync_timestamp',
-        fields: ['syncTimestamp']
-      }
-    ]
+  {
+    name: 'idx_sms_device',
+    fields: ['deviceId']
+  },
+  {
+    name: 'idx_sms_device_date',
+    fields: ['deviceId', 'date']
+  },
+  {
+    name: 'idx_sms_device_thread',
+    fields: ['deviceId', 'threadId']
+  },
+  {
+    name: 'idx_sms_address',
+    fields: ['address']
+  },
+  {
+    name: 'idx_sms_type',
+    fields: ['type']
+  },
+  {
+    name: 'idx_sms_timestamp',
+    fields: ['timestamp']
+  },
+  {
+    name: 'idx_sms_sync_timestamp',
+    fields: ['syncTimestamp']
+  },
+  {
+    name: 'idx_sms_device_type',
+    fields: ['deviceId', 'type']
+  },
+  {
+    name: 'idx_sms_smsid_device',
+    fields: ['smsId', 'deviceId'],
+    unique: true
+  }
+]
   }
 );
-
-  // Add syncWithDatabase method for special handling
-  SMS.syncWithDatabase = async (options = {}) => {
-    const queryInterface = sequelize.getQueryInterface();
-    const transaction = await sequelize.transaction();
-    
-    try {
-      // Drop existing foreign key constraints if they exist
-      await queryInterface.removeConstraint('sms_messages', 'sms_messages_ibfk_1', { transaction }).catch(() => {});
-      await queryInterface.removeConstraint('sms_messages', 'sms_messages_deviceId_fk', { transaction }).catch(() => {});
-      
-      // Sync the model without applying indexes first
-      await SMS.sync({ ...options, transaction, indexes: [] });
-      
-      // Add the correct foreign key constraint
-      await queryInterface.addConstraint('sms_messages', {
-        fields: ['deviceId'],
-        type: 'foreign key',
-        name: 'sms_messages_deviceId_fk',
-        references: { 
-          table: 'devices', 
-          field: 'deviceId' 
-        },
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
-        transaction
-      });
-      
-      // Get existing indexes
-      let existingIndexes = [];
-      try {
-        existingIndexes = await queryInterface.showIndex('sms_messages', { transaction });
-      } catch (error) {
-        console.warn('Could not retrieve existing indexes, will attempt to create them:', error.message);
-      }
-      
-      const indexNames = existingIndexes.map(idx => idx.Key_name);
-      
-      // Helper function to safely add an index
-      const safeAddIndex = async (indexName, fields, options = {}) => {
-        if (!indexNames.includes(indexName)) {
-          try {
-            await queryInterface.addIndex('sms_messages', fields, {
-              name: indexName,
-              transaction,
-              ...options
-            });
-            console.log(`Created index ${indexName} on sms_messages`);
-            return true;
-          } catch (error) {
-            if (error.original && error.original.code === 'ER_DUP_KEYNAME') {
-              console.log(`Index ${indexName} already exists, skipping creation`);
-              return true;
-            } else {
-              console.error(`Error creating index ${indexName}:`, error.message);
-              throw error;
-            }
-          }
-        } else {
-          console.log(`Index ${indexName} already exists, skipping creation`);
-          return true;
-        }
-      };
-      
-      // Add necessary indexes
-      try {
-        await safeAddIndex('sms_messages_deviceId', ['deviceId']);
-        await safeAddIndex('sms_messages_thread_id', ['thread_id']);
-        await safeAddIndex('sms_messages_address', ['address']);
-        await safeAddIndex('sms_messages_date', ['date']);
-        await safeAddIndex('sms_messages_type', ['type']);
-      } catch (error) {
-        console.error('Failed to create one or more indexes:', error);
-        throw error;
-      }
-      
-      await transaction.commit();
-      return SMS;
-    } catch (error) {
-      await transaction.rollback();
-      console.error('Error syncing SMS model:', error);
-      throw error;
-    }
-  };
 
   return SMS;
 };

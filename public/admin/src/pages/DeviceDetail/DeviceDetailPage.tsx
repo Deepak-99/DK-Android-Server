@@ -1,44 +1,72 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import DashboardLayout from "@/layout/DashboardLayout";
+import { Box, Tabs, Tab } from "@mui/material";
+
+import DashboardLayout from "../../layouts/DashboardLayout";
 import DeviceHeader from "./header/DeviceHeader";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// Existing feature pages
 import InfoTab from "./tabs/InfoTab";
-import LocationTab from "./tabs/LocationTab";
-import FilesTab from "./tabs/FilesTab";
-import CommandsTab from "./tabs/CommandsTab";
-import SmsTab from "./tabs/SmsTab";
-import ContactsTab from "./tabs/ContactsTab";
-import AppsTab from "./tabs/AppsTab";
-import LogsTab from "./tabs/LogsTab";
+import LocationTab from "./tabs/LocationTab/LocationTab";
+
+import FileExplorer from "../Devices/[id]/features/FileExplorer";
+import Commands from "../Devices/[id]/features/Commands";
+import SMS from "../Devices/[id]/features/SMS";
+import Contacts from "../Devices/[id]/features/Contacts";
+import InstalledApps from "../Devices/[id]/features/InstalledApps";
+import CallLogs from "../Devices/[id]/features/CallLogs";
 
 export default function DeviceDetailPage() {
-    const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
+  const [tab, setTab] = useState(0);
 
-    return (
-        <DashboardLayout>
-            <DeviceHeader deviceId={id!} />
+  if (!id) return null;
 
-            <Tabs defaultValue="info" className="mt-6">
-                <TabsList className="w-full overflow-x-auto">
-                    <TabsTrigger value="info">Info</TabsTrigger>
-                    <TabsTrigger value="location">Location</TabsTrigger>
-                    <TabsTrigger value="files">Files</TabsTrigger>
-                    <TabsTrigger value="commands">Commands</TabsTrigger>
-                    <TabsTrigger value="sms">SMS</TabsTrigger>
-                    <TabsTrigger value="contacts">Contacts</TabsTrigger>
-                    <TabsTrigger value="apps">Apps</TabsTrigger>
-                    <TabsTrigger value="logs">Logs</TabsTrigger>
-                </TabsList>
+  return (
+    <DashboardLayout>
+      <DeviceHeader deviceId={id} />
 
-                <TabsContent value="info"><InfoTab deviceId={id!} /></TabsContent>
-                <TabsContent value="location"><LocationTab deviceId={id!} /></TabsContent>
-                <TabsContent value="files"><FilesTab deviceId={id!} /></TabsContent>
-                <TabsContent value="commands"><CommandsTab deviceId={id!} /></TabsContent>
-                <TabsContent value="sms"><SmsTab deviceId={id!} /></TabsContent>
-                <TabsContent value="contacts"><ContactsTab deviceId={id!} /></TabsContent>
-                <TabsContent value="apps"><AppsTab deviceId={id!} /></TabsContent>
-                <TabsContent value="logs"><LogsTab deviceId={id!} /></TabsContent>
-            </Tabs>
-        </DashboardLayout>
-    );
+      {/* Tabs Header */}
+      <Box sx={{ borderBottom: 1, borderColor: "divider", mt: 2 }}>
+        <Tabs
+          value={tab}
+          onChange={(_, v) => setTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab label="Info" />
+          <Tab label="Location" />
+          <Tab label="Files" />
+          <Tab label="Commands" />
+          <Tab label="SMS" />
+          <Tab label="Contacts" />
+          <Tab label="Apps" />
+          <Tab label="Logs" />
+        </Tabs>
+      </Box>
+
+      {/* Tab Content */}
+        <Box sx={{ mt: 2 }}>
+
+            {tab === 0 && <InfoTab deviceId={id} />}
+
+            {tab === 1 && <LocationTab deviceId={id} />}
+
+            {tab === 2 && <FileExplorer />}
+
+            {tab === 3 && <Commands />}
+
+            {tab === 4 && <SMS />}
+
+            {tab === 5 && <Contacts />}
+
+            {tab === 6 && <InstalledApps />}
+
+            {tab === 7 && <CallLogs />}
+
+        </Box>
+
+
+    </DashboardLayout>
+  );
 }

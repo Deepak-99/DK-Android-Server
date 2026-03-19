@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { screenRecordingApi } from "@/services/screenRecordingApi";
+import { screenRecordingApi } from "../../services/screenRecordingApi";
 import { ScreenRecording } from "./types";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useWebSocket } from "../../hooks/useWebSocket";
 
 export function useScreenRecordings(deviceId: string) {
     const [files, setFiles] = useState<ScreenRecording[]>([]);

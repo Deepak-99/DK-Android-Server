@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+
 import {
   Box,
   Typography,
@@ -7,7 +8,6 @@ import {
   CardContent,
   CardMedia,
   IconButton,
-  Grid,
   TextField,
   InputAdornment,
   CircularProgress,
@@ -16,239 +16,285 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
+  DialogActions
 } from '@mui/material';
+
 import {
   Search,
   PlayArrow,
   Pause,
   Delete,
   Download,
-  Refresh,
-  Info,
+  Refresh
 } from '@mui/icons-material';
+
 import { useSnackbar } from 'notistack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
 import {
   getCallRecordings,
   deleteCallRecording,
-  downloadCallRecording,
-} from '../../../services/callRecordings';
-import ErrorBoundary from '../../../components/common/ErrorBoundary';
-import { formatFileSize, formatDate } from '../../../utils/format';
+  downloadCallRecording
+} from '../../../../services/callRecordingApi';
+
+import ErrorBoundary from '../../../../components/common/ErrorBoundary';
+import type { CallRecording } from '../../../CallRecordings/types';
+
+// ---------------------------------------------------
 
 const CallRecordings = () => {
+
   const { id: deviceId } = useParams<{ id: string }>();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRecording, setSelectedRecording] = useState<any>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
 
+  const [search, setSearch] = useState('');
+  const [page] = useState(1);
+  const [limit] = useState(12);
+
+  const [selected, setSelected] = useState<CallRecording | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // ---------------------------------------------------
+  // Fetch recordings
+  // ---------------------------------------------------
+
   const {
-    data: recordings = [],
+    data,
     isLoading,
-    error,
-    refetch,
-  } = useQuery(['callRecordings', deviceId, searchTerm], () =>
-    getCallRecordings(deviceId!, searchTerm)
-  );
+    isError,
+    refetch
+  } = useQuery({
 
-  const deleteMutation = useMutation(
-    (recordingId: string) => deleteCallRecording(deviceId!, recordingId),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['callRecordings', deviceId]);
-        enqueueSnackbar('Recording deleted successfully', { variant: 'success' });
-      },
-      onError: () => {
-        enqueueSnackbar('Failed to delete recording', { variant: 'error' });
-      },
+    queryKey: ['callRecordings', deviceId, page, search],
+
+    queryFn: () =>
+      getCallRecordings(deviceId!, {
+        page,
+        limit,
+        search
+      }),
+
+    enabled: !!deviceId,
+
+    placeholderData: prev => prev
+  });
+
+  const recordings = data?.data ?? [];
+
+  // ---------------------------------------------------
+  // Delete mutation
+  // ---------------------------------------------------
+
+  const deleteMutation = useMutation({
+
+    mutationFn: (id: string) =>
+      deleteCallRecording(deviceId!, id),
+
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['callRecordings']
+      });
+
+      enqueueSnackbar('Recording deleted', { variant: 'success' });
+    },
+
+    onError: () => {
+      enqueueSnackbar('Delete failed', { variant: 'error' });
     }
-  );
+  });
 
-  const handlePlayPause = (recording: any) => {
-    if (selectedRecording?.id === recording.id) {
-      setIsPlaying(!isPlaying);
+  // ---------------------------------------------------
+
+  const handlePlay = (rec: CallRecording) => {
+    if (selected?.id === rec.id) {
+      setPlaying(!playing);
     } else {
-      setSelectedRecording(recording);
-      setIsPlaying(true);
-      // TODO: Implement actual audio playback
+      setSelected(rec);
+      setPlaying(true);
     }
   };
 
-  const handleDelete = (recordingId: string) => {
-    deleteMutation.mutate(recordingId);
-    setOpenDeleteDialog(false);
+  const handleDelete = () => {
+    if (!selected) return;
+
+    deleteMutation.mutate(selected.id.toString());
+    setDeleteOpen(false);
   };
 
-  const handleDownload = async (recording: any) => {
-    try {
-      await downloadCallRecording(deviceId!, recording.id, recording.filename);
-    } catch (error) {
-      enqueueSnackbar('Failed to download recording', { variant: 'error' });
-    }
+  const handleDownload = (rec: CallRecording) => {
+    downloadCallRecording(deviceId!, rec.id.toString());
   };
 
-  if (error) {
-    return <Typography color="error">Error loading call recordings</Typography>;
+  // ---------------------------------------------------
+
+  if (isError) {
+    return <Typography color="error">Failed to load recordings</Typography>;
   }
 
-  return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h5">Call Recordings</Typography>
-        <Box display="flex" gap={2}>
-          <TextField
-            size="small"
-            placeholder="Search recordings..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-          />
-          <IconButton onClick={() => refetch()} disabled={isLoading}>
-            <Refresh />
-          </IconButton>
-        </Box>
-      </Box>
+  // ---------------------------------------------------
 
-      {isLoading ? (
-        <Box display="flex" justifyContent="center" my={4}>
-          <CircularProgress />
+  return (
+    <ErrorBoundary>
+
+      <Box>
+
+        {/* Header */}
+
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={3}
+        >
+
+          <Typography variant="h5">
+            Call Recordings
+          </Typography>
+
+          <Box display="flex" gap={2}>
+
+            <TextField
+              size="small"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search fontSize="small" />
+                    </InputAdornment>
+                  )
+                }
+              }}
+            />
+
+            <IconButton onClick={() => refetch()}>
+              <Refresh />
+            </IconButton>
+
+          </Box>
+
         </Box>
-      ) : recordings.length === 0 ? (
-        <Box textAlign="center" my={4}>
-          <Typography>No call recordings found</Typography>
-        </Box>
-      ) : (
-        <Grid container spacing={3}>
-          {recordings.map((recording: any) => (
-            <Grid item xs={12} sm={6} md={4} key={recording.id}>
-              <Card>
+
+        {/* Content */}
+
+        {isLoading ? (
+
+          <Box textAlign="center" py={6}>
+            <CircularProgress />
+          </Box>
+
+        ) : recordings.length === 0 ? (
+
+          <Typography textAlign="center">
+            No recordings found
+          </Typography>
+
+        ) : (
+
+          <Box
+            display="grid"
+            gridTemplateColumns="repeat(auto-fill, minmax(280px, 1fr))"
+            gap={3}
+          >
+
+            {recordings.map(rec => (
+
+              <Card key={rec.id}>
+
                 <CardMedia
                   component="img"
-                  height="140"
-                  image={recording.thumbnailUrl || '/placeholder-recording.jpg'}
-                  alt="Call recording"
+                  height="120"
+                  image="/placeholder-recording.jpg"
                 />
+
                 <CardContent>
-                  <Typography gutterBottom variant="h6" noWrap>
-                    {recording.contactName || 'Unknown Caller'}
+
+                  <Typography variant="subtitle1" noWrap>
+                    {rec.contactName || rec.phoneNumber}
                   </Typography>
-                  <Box display="flex" alignItems="center" mb={1}>
-                    <Chip
-                      label={recording.type}
-                      size="small"
-                      color={
-                        recording.type === 'incoming'
-                          ? 'primary'
-                          : recording.type === 'outgoing'
-                          ? 'success'
-                          : 'default'
-                      }
-                    />
-                    <Box ml="auto" display="flex" gap={1}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handlePlayPause(recording)}
-                      >
-                        {isPlaying && selectedRecording?.id === recording.id ? (
-                          <Pause fontSize="small" />
-                        ) : (
-                          <PlayArrow fontSize="small" />
-                        )}
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDownload(recording)}
-                      >
-                        <Download fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setOpenDeleteDialog(true)}
-                      >
-                        <Delete fontSize="small" color="error" />
-                      </IconButton>
-                    </Box>
+
+                  <Chip
+                    size="small"
+                    label={rec.status || 'completed'}
+                    sx={{ mt: 1 }}
+                  />
+
+                  <Typography variant="body2" mt={1}>
+                    Duration: {rec.duration}s
+                  </Typography>
+
+                  <Typography variant="body2">
+                    Size: {(rec.fileSize / 1024 / 1024).toFixed(2)} MB
+                  </Typography>
+
+                  <Box display="flex" justifyContent="space-between" mt={2}>
+
+                    <IconButton onClick={() => handlePlay(rec)}>
+                      {playing && selected?.id === rec.id
+                        ? <Pause />
+                        : <PlayArrow />}
+                    </IconButton>
+
+                    <IconButton onClick={() => handleDownload(rec)}>
+                      <Download />
+                    </IconButton>
+
+                    <IconButton
+                      onClick={() => {
+                        setSelected(rec);
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      <Delete color="error" />
+                    </IconButton>
+
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {formatDate(recording.timestamp)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {formatFileSize(recording.fileSize)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Duration: {recording.duration}
-                  </Typography>
+
                 </CardContent>
+
               </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={openDeleteDialog}
-        onClose={() => setOpenDeleteDialog(false)}
-      >
-        <DialogTitle>Delete Recording</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this recording? This action cannot be
-            undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
-          <Button
-            onClick={() => selectedRecording && handleDelete(selectedRecording.id)}
-            color="error"
-            variant="contained"
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+            ))}
 
-      {/* Audio Player */}
-      {selectedRecording && (
-        <Box
-          position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          p={2}
-          bgcolor="background.paper"
-          boxShadow={3}
-        >
-          <Box display="flex" alignItems="center" maxWidth={1200} mx="auto">
-            <IconButton onClick={() => setIsPlaying(!isPlaying)}>
-              {isPlaying ? <Pause /> : <PlayArrow />}
-            </IconButton>
-            <Box ml={2} flexGrow={1}>
-              <Typography variant="subtitle1">
-                {selectedRecording.contactName || 'Unknown Caller'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {formatDate(selectedRecording.timestamp)}
-              </Typography>
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              {selectedRecording.duration}
-            </Typography>
           </Box>
-        </Box>
-      )}
-    </Box>
+
+        )}
+
+        {/* Delete dialog */}
+
+        <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+
+          <DialogTitle>Delete Recording</DialogTitle>
+
+          <DialogContent>
+            Are you sure you want to delete this recording?
+          </DialogContent>
+
+          <DialogActions>
+
+            <Button onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+
+            <Button
+              color="error"
+              variant="contained"
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
+
+          </DialogActions>
+
+        </Dialog>
+
+      </Box>
+
+    </ErrorBoundary>
   );
 };
 

@@ -4,10 +4,6 @@ export function saveToken(token: string) {
     sessionStorage.setItem(TOKEN_KEY, token);
 }
 
-export function getToken(): string | null {
-    return sessionStorage.getItem(TOKEN_KEY);
-}
-
-export function clearToken() {
-    sessionStorage.removeItem(TOKEN_KEY);
-}
+export const getToken = () => localStorage.getItem('token');
+export const setToken = (token: string) => localStorage.setItem('token', token);
+export const clearToken = () => localStorage.removeItem('token');

@@ -1,49 +1,107 @@
 import { useEffect, useState } from "react";
-import { deviceInfoApi } from "@/services/deviceInfoApi";
-import { ws } from "@/services/ws";
+import { devicesApi } from "../../services/devicesApi";
+import { subscribe } from "../../services/websocket";
+
+interface DeviceHeartbeatPayload {
+  deviceId: string;
+  batteryLevel?: number;
+  networkType?: string;
+}
+
+interface DeviceStatusPayload {
+  deviceId: string;
+  status: "online" | "offline";
+}
 
 export function useDeviceDetail(deviceId: string) {
-    const [info, setInfo] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
 
-    // fetch static info
-    useEffect(() => {
-        async function load() {
-            setLoading(true);
-            const res = await deviceInfoApi.get(deviceId);
-            setInfo(res.data);
-            setLoading(false);
+  const numericId = Number(deviceId);
+
+  const [info, setInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // -------------------------
+  // Load static device info
+  // -------------------------
+
+  useEffect(() => {
+
+    if (!numericId) return;
+
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        setLoading(true);
+
+        const res = await devicesApi.get(numericId);
+
+        if (mounted) {
+          setInfo(res.data);
         }
-        load();
-    }, [deviceId]);
 
-    // WebSocket live updates
-    useEffect(() => {
-        ws.join(`device:${deviceId}`);
+      } catch (err) {
+        console.error("Device info load failed", err);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
 
-        ws.subscribe("device_heartbeat", (payload) => {
-            if (payload.deviceId === deviceId) {
-                setInfo((prev: any) => ({
-                    ...prev,
-                    battery: payload.batteryLevel,
-                    network: payload.networkType,
-                    isOnline: true,
-                    lastSeen: new Date().toISOString(),
-                }));
-            }
-        });
+    // call async function safely
+    void load();
 
-        ws.subscribe("device_status", (payload) => {
-            if (payload.deviceId === deviceId) {
-                setInfo((prev: any) => ({
-                    ...prev,
-                    isOnline: payload.status === "online",
-                }));
-            }
-        });
+    return () => {
+      mounted = false;
+    };
 
-        return () => ws.leave(`device:${deviceId}`);
-    }, [deviceId]);
+  }, [numericId]);
 
-    return { info, loading };
+  // -------------------------
+  // WebSocket live updates
+  // -------------------------
+
+  useEffect(() => {
+
+    const unsubscribe = subscribe((event: any) => {
+
+      // Battery + heartbeat update
+      if (event.type === "device_heartbeat") {
+
+        const payload = event as DeviceHeartbeatPayload;
+
+        if (payload.deviceId !== deviceId) return;
+
+        setInfo((prev: any) => ({
+          ...prev,
+          battery: payload.batteryLevel,
+          network: payload.networkType,
+          isOnline: true,
+          lastSeen: new Date().toISOString()
+        }));
+      }
+
+      // Online / offline state
+      if (event.type === "device_status") {
+
+        const payload = event as DeviceStatusPayload;
+
+        if (payload.deviceId !== deviceId) return;
+
+        setInfo((prev: any) => ({
+          ...prev,
+          isOnline: payload.status === "online"
+        }));
+      }
+
+    });
+
+    return () => {
+      unsubscribe();
+    };
+
+  }, [deviceId]);
+
+  return { info, loading };
 }

@@ -135,48 +135,7 @@ module.exports = (sequelize) => {
       tableName: 'device_audio',
       timestamps: true,
       underscored: true,
-      hooks: {
-        afterSync: async (options) => {
-          const queryInterface = options.sequelize.getQueryInterface();
-          const transaction = await options.sequelize.transaction();
-          
-          try {
-            // Check if the constraint already exists
-            const [results] = await options.sequelize.query(
-              `SELECT * FROM information_schema.table_constraints 
-               WHERE constraint_schema = DATABASE() 
-               AND table_name = 'device_audio' 
-               AND constraint_name = 'device_audio_device_id_fk'`,
-              { transaction }
-            );
-            
-            // Only add the constraint if it doesn't exist
-            if (results.length === 0) {
-              // Drop any existing foreign key constraints if they exist
-              await queryInterface.removeConstraint('device_audio', 'device_audio_ibfk_1', { transaction }).catch(() => {});
-              
-              // Add the correct foreign key constraint
-              await queryInterface.addConstraint('device_audio', {
-                fields: ['deviceId'],
-                type: 'foreign key',
-                name: 'device_audio_device_id_fk',
-                references: { 
-                  table: 'devices', 
-                  field: 'deviceId' 
-                },
-                onDelete: 'CASCADE',
-                onUpdate: 'CASCADE',
-                transaction
-              });
-            }
-            
-            await transaction.commit();
-          } catch (error) {
-            await transaction.rollback();
-            console.error('Error setting up device_audio foreign keys:', error);
-          }
-        }
-      },
+
       indexes: [
           {
               name: 'idx_device_audio_device_id',

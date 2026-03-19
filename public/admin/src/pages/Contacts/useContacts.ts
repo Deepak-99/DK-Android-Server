@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { contactsApi } from "@/services/contactsApi";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { contactsApi } from "../../services/contactsApi";
+import { useWebSocket } from "../../hooks/useWebSocket";
 import { ContactItem } from "./types";
 
 export function useContacts(deviceId: string) {

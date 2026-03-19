@@ -1,182 +1,293 @@
-import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState } from "react";
+import { useParams } from "react-router-dom";
+import WebRTCViewer from "../../../../components/webrtc/WebRTCViewer";
+
 import {
-    Box, Typography, Paper, Button, IconButton,
-    CircularProgress, Grid, Slider, Tooltip
-} from '@mui/material';
+    Box,
+    Typography,
+    Paper,
+    IconButton,
+    Slider,
+    Tooltip
+} from "@mui/material";
+
 import {
-    PlayArrow, Stop, Refresh, Fullscreen,
-    FullscreenExit, ZoomIn, ZoomOut
-} from '@mui/icons-material';
-import { useSnackbar } from 'notistack';
-import { useQuery } from '@tanstack/react-query';
-import { startScreenCapture, stopScreenCapture, getScreenCaptureStatus } from '../../../services/screenCapture';
+    PlayArrow,
+    Stop,
+    Refresh,
+    Fullscreen,
+    FullscreenExit,
+    ZoomIn,
+    ZoomOut
+} from "@mui/icons-material";
+
+import { useSnackbar } from "notistack";
+import { useQuery } from "@tanstack/react-query";
+
+import {
+    startScreenCapture,
+    stopScreenCapture,
+    getScreenCaptureStatus,
+    ScreenCaptureStatus
+} from "../../../../services/screenCapture";
+
+/* ✅ H264 WebCodecs Viewer */
+import H264Viewer from "../../../../components/stream/H264Viewer";
 
 const ScreenProjections = () => {
+
     const { id: deviceId } = useParams();
+    const { enqueueSnackbar } = useSnackbar();
+
     const [isStreaming, setIsStreaming] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [zoom, setZoom] = useState(100);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const { enqueueSnackbar } = useSnackbar();
 
-    const { data: streamStatus, refetch } = useQuery(
-        ['screenCaptureStatus', deviceId],
-        () => getScreenCaptureStatus(deviceId!),
-        {
-            enabled: isStreaming,
-            refetchInterval: 3000,
-        }
-    );
+    /* ----------------------------------------------------
+       STREAM STATUS POLLING
+    ---------------------------------------------------- */
+
+    const {
+        data: streamStatus,
+        refetch
+    } = useQuery<ScreenCaptureStatus>({
+        queryKey: ["screenCaptureStatus", deviceId],
+        queryFn: () => getScreenCaptureStatus(deviceId!),
+        enabled: isStreaming && !!deviceId,
+        refetchInterval: 3000
+    });
+
+    /* ----------------------------------------------------
+       START STREAM
+    ---------------------------------------------------- */
 
     const startStream = async () => {
         try {
-            const streamUrl = await startScreenCapture(deviceId!);
-            if (videoRef.current) {
-                videoRef.current.src = streamUrl;
-                videoRef.current.play().catch(e => {
-                    enqueueSnackbar('Failed to start video playback', { variant: 'error' });
-                    console.error('Video play error:', e);
-                });
-            }
+
+            await startScreenCapture(deviceId!);
+
             setIsStreaming(true);
-        } catch (error) {
-            enqueueSnackbar('Failed to start screen capture', { variant: 'error' });
+
+        } catch {
+
+            enqueueSnackbar(
+                "Failed to start projection",
+                { variant: "error" }
+            );
         }
     };
+
+    /* ----------------------------------------------------
+       STOP STREAM
+    ---------------------------------------------------- */
 
     const stopStream = async () => {
+
         try {
+
             await stopScreenCapture(deviceId!);
-            if (videoRef.current) {
-                videoRef.current.pause();
-                videoRef.current.src = '';
-            }
+
             setIsStreaming(false);
-        } catch (error) {
-            enqueueSnackbar('Failed to stop screen capture', { variant: 'error' });
+
+        } catch {
+
+            enqueueSnackbar(
+                "Failed to stop projection",
+                { variant: "error" }
+            );
         }
     };
 
-    const toggleFullscreen = () => {
+    /* ----------------------------------------------------
+       FULLSCREEN
+    ---------------------------------------------------- */
+
+    const toggleFullscreen = async () => {
+
+        const container =
+            document.getElementById("stream-container");
+
         if (!document.fullscreenElement) {
-            videoRef.current?.requestFullscreen().catch(e => {
-                console.error('Fullscreen error:', e);
-            });
+
+            await container?.requestFullscreen();
             setIsFullscreen(true);
+
         } else {
-            document.exitFullscreen();
+
+            await document.exitFullscreen();
             setIsFullscreen(false);
         }
     };
 
+    /* ====================================================
+       UI
+    ==================================================== */
+
     return (
         <Box>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h5">Screen Projection</Typography>
+
+            {/* HEADER */}
+            <Box
+                display="flex"
+                justifyContent="space-between"
+                mb={2}
+            >
+                <Typography variant="h5">
+                    Screen Projection
+                </Typography>
+
                 <Box>
-                    <Tooltip title={isStreaming ? 'Stop' : 'Start'}>
+
+                    <Tooltip title={isStreaming ? "Stop" : "Start"}>
                         <IconButton
-                            color={isStreaming ? 'error' : 'primary'}
-                            onClick={isStreaming ? stopStream : startStream}
-                            sx={{ mr: 1 }}
+                            color={isStreaming ? "error" : "primary"}
+                            onClick={
+                                isStreaming
+                                    ? stopStream
+                                    : startStream
+                            }
                         >
-                            {isStreaming ? <Stop /> : <PlayArrow />}
+                            {isStreaming
+                                ? <Stop />
+                                : <PlayArrow />}
                         </IconButton>
                     </Tooltip>
+
                     <Tooltip title="Refresh">
-                        <IconButton onClick={() => refetch()} disabled={!isStreaming}>
+                        <IconButton
+                            onClick={() => refetch()}
+                            disabled={!isStreaming}
+                        >
                             <Refresh />
                         </IconButton>
                     </Tooltip>
+
                 </Box>
             </Box>
 
+            {/* STREAM AREA */}
             <Paper
+                id="stream-container"
                 sx={{
-                    position: 'relative',
-                    backgroundColor: 'black',
-                    overflow: 'hidden',
-                    aspectRatio: '16/9',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center'
+                    position: "relative",
+                    backgroundColor: "black",
+                    aspectRatio: "16/9",
+                    overflow: "hidden",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
                 }}
             >
-                {isStreaming ? (
-                    <video
-                        ref={videoRef}
-                        style={{
-                            width: `${zoom}%`,
-                            height: 'auto',
-                            maxWidth: '100%',
-                            maxHeight: '100%',
-                            objectFit: 'contain'
-                        }}
-                        controls={false}
-                        autoPlay
-                        playsInline
-                        muted
-                    />
-                ) : (
-                    <Typography color="text.secondary">
-                        Click the play button to start screen projection
-                    </Typography>
-                )}
 
-                {isStreaming && (
+                {isStreaming ? (
+
                     <Box
                         sx={{
-                            position: 'absolute',
+                            transform: `scale(${zoom / 100})`,
+                            transformOrigin: "center",
+                            width: "100%",
+                            height: "100%"
+                        }}
+                    >
+                        <WebRTCViewer deviceId={deviceId!} />
+                    </Box>
+
+                ) : (
+
+                    <Typography
+                        color="text.secondary"
+                        sx={{ p: 3 }}
+                    >
+                        Click play to start screen projection
+                    </Typography>
+
+                )}
+
+                {/* CONTROLS */}
+                {isStreaming && (
+
+                    <Box
+                        sx={{
+                            position: "absolute",
                             bottom: 16,
                             left: 16,
                             right: 16,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            display: "flex",
+                            justifyContent: "space-between",
+                            backgroundColor: "rgba(0,0,0,0.5)",
                             p: 1,
-                            borderRadius: 1,
+                            borderRadius: 1
                         }}
                     >
-                        <Box sx={{ width: 200, display: 'flex', alignItems: 'center' }}>
-                            <ZoomOut fontSize="small" sx={{ mr: 1 }} />
+
+                        {/* ZOOM */}
+                        <Box
+                            sx={{
+                                width: 220,
+                                display: "flex",
+                                alignItems: "center"
+                            }}
+                        >
+
+                            <ZoomOut />
+
                             <Slider
                                 value={zoom}
-                                onChange={(_, value) => setZoom(value as number)}
+                                onChange={(_, v) =>
+                                    setZoom(v as number)
+                                }
                                 min={25}
                                 max={200}
-                                step={25}
-                                valueLabelDisplay="auto"
-                                valueLabelFormat={(value) => `${value}%`}
-                                sx={{ color: 'white' }}
                             />
-                            <ZoomIn fontSize="small" sx={{ ml: 1 }} />
+
+                            <ZoomIn />
+
                         </Box>
 
-                        <Box>
-                            <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
-                                <IconButton
-                                    onClick={toggleFullscreen}
-                                    sx={{ color: 'white' }}
-                                >
-                                    {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
-                                </IconButton>
-                            </Tooltip>
-                        </Box>
+                        {/* FULLSCREEN */}
+                        <IconButton
+                            onClick={toggleFullscreen}
+                            sx={{ color: "white" }}
+                        >
+                            {isFullscreen
+                                ? <FullscreenExit />
+                                : <Fullscreen />}
+                        </IconButton>
+
                     </Box>
+
                 )}
+
             </Paper>
 
+            {/* STATUS */}
             {streamStatus && (
+
                 <Box mt={2}>
-                    <Typography variant="subtitle2">Stream Info</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Resolution: {streamStatus.resolution} | FPS: {streamStatus.fps} |
-                        Bitrate: {streamStatus.bitrate} kbps | Status: {streamStatus.status}
+
+                    <Typography variant="subtitle2">
+                        Stream Info
                     </Typography>
+
+                    <Typography
+                        variant="body2"
+                        color="text.secondary"
+                    >
+
+                        Resolution: {streamStatus.resolution}
+                        {" | "}
+                        FPS: {streamStatus.fps}
+                        {" | "}
+                        Bitrate: {streamStatus.bitrate}
+                        {" kbps | "}
+                        Status: {streamStatus.status}
+
+                    </Typography>
+
                 </Box>
+
             )}
+
         </Box>
     );
 };

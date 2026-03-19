@@ -20,16 +20,16 @@ export interface CallLog {
 }
 
 export interface CallLogsFilter {
+    page?: number;
+    limit?: number;
+    search?: string;
+    type?: string;
     startDate?: string;
     endDate?: string;
-    type?: string;
-    minDuration?: number;
-    searchQuery?: string;
-    limit?: number;
-    offset?: number;
-    sortBy?: 'date' | 'duration' | 'type';
-    sortOrder?: 'asc' | 'desc';
+    sortBy?: 'date' | 'duration' | 'phoneNumber';
+    sortOrder?: 'ASC' | 'DESC';
 }
+
 
 export interface CallLogsStats {
     total: number;
@@ -45,15 +45,29 @@ export interface CallLogsStats {
     byContact: Array<{ name: string; number: string; count: number }>;
 }
 
+export interface CallLogsResponse {
+    data: CallLog[];
+    pagination: {
+        total: number;
+        page: number;
+        totalPages: number;
+    };
+}
+
+
 export const getCallLogs = async (
     deviceId: string,
     filter?: CallLogsFilter
-): Promise<CallLog[]> => {
-    const response = await api.get(`/devices/${deviceId}/call-logs`, {
-        params: filter,
-    });
+): Promise<CallLogsResponse> => {
+
+    const response = await api.get(
+        `/devices/${deviceId}/logs`,
+        { params: filter }
+    );
+
     return response.data;
 };
+
 
 export const getCallLogStats = async (
     deviceId: string,

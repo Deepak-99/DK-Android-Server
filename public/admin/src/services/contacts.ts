@@ -306,3 +306,29 @@ export const deleteContactPhoto = async (
 ): Promise<void> => {
     await api.delete(`/devices/${deviceId}/contacts/${contactId}/photo`);
 };
+
+export interface PaginatedContactsResponse {
+    data: Contact[];
+    pagination: {
+        total: number;
+        page: number;
+        totalPages: number;
+    };
+}
+
+export const getContactsPaginated = async (
+    deviceId: string,
+    params: {
+        page: number;
+        limit: number;
+        search?: string;
+    }
+): Promise<PaginatedContactsResponse> => {
+
+    const res = await api.get(`/contacts/${deviceId}`, {
+        params
+    });
+
+    return res.data;
+};
+

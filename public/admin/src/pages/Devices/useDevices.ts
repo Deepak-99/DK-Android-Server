@@ -1,30 +1,63 @@
 import { useEffect, useState } from "react";
-import { devicesApi, Device } from "@/services/devicesApi";
-import { useWSDeviceStore } from "@/store/wsDeviceStore";
-import { ws } from "@/services/ws";
+import { devicesApi, Device } from "../../services/devicesApi";
+import { useWSDeviceStore } from "../../store/wsDeviceStore";
+import { subscribe } from "../../services/websocket";
 
 export function useDevices() {
     const [loading, setLoading] = useState(true);
     const [devices, setDevices] = useState<Device[]>([]);
-    const liveStatus = useWSDeviceStore((s) => s.liveStatus);
-    const updateStatus = useWSDeviceStore((s) => s.updateStatus);
+
+    const liveStatus = useWSDeviceStore((state) => state.liveStatus);
+    const updateStatus = useWSDeviceStore((state) => state.updateStatus);
+
+    /* ================================
+       Initial Load
+    ================================= */
 
     useEffect(() => {
+
         async function load() {
-            setLoading(true);
-            const res = await devicesApi.list();
-            setDevices(res.data.devices);
-            setLoading(false);
+            try {
+                setLoading(true);
+                const res = await devicesApi.list();
+                setDevices(res.data.devices);
+            } finally {
+                setLoading(false);
+            }
         }
-        load();
+
+        void load(); // prevent ignored promise warning
+
     }, []);
 
-    // WebSocket live updates
+    /* ================================
+       WebSocket Live Updates
+    ================================= */
+
     useEffect(() => {
-        ws.subscribe("device_status", (payload: any) => {
-            updateStatus(payload.deviceId, payload.status);
+
+        const unsubscribe = subscribe((event) => {
+
+            if (event.type === "device_status") {
+                const payload = event.payload as {
+                    deviceId: string;
+                    status: string;
+                };
+
+                updateStatus(payload.deviceId, payload.status);
+            }
+
         });
-    }, []);
+
+        return () => {
+            unsubscribe();
+        };
+
+    }, [updateStatus]);
+
+    /* ================================
+       Return enriched devices
+    ================================= */
 
     return {
         loading,

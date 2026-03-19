@@ -2188,12 +2188,6 @@ module.exports = {
       });
 
       // Devices
-      await queryInterface.addIndex('devices', ['deviceId'], {
-        name: 'idx_devices_deviceId',
-        unique: true,
-        transaction
-      });
-
       await queryInterface.addIndex('devices', ['userId'], {
         name: 'idx_devices_userId',
         transaction
@@ -2331,7 +2325,7 @@ module.exports = {
       await queryInterface.dropTable('contacts', { transaction });
       await queryInterface.dropTable('call_recordings', { transaction });
       await queryInterface.dropTable('call_logs', { transaction });
-      await queryInterface.dropTable('device_infos', { transaction });
+      await queryInterface.dropTable('device_info', { transaction });
       await queryInterface.dropTable('devices', { transaction });
       await queryInterface.dropTable('users', { transaction });
       

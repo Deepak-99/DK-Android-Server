@@ -1,38 +1,38 @@
-const { Screenshot, Device } = require('../../../models');
+const { Screenshot, Device } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
-const path = require('path');
+const logger = require('../utils/logger');
 const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const {
+    serverError,
+    parsePagination,
+    buildDateFilter,
+    safeUnlink
+} = require('../utils/controllerHelpers');
 
-/**
- * Get screenshots for a device
- */
+
+
+/* ------------------------------------------------------------------
+ * Get screenshots (list)
+ * ------------------------------------------------------------------ */
+
 const getScreenshots = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            startDate, 
-            endDate, 
-            page = 1,
-            limit = 50 
-        } = req.query;
+        const { startDate, endDate, page = 1, limit = 50 } = req.query;
 
-        const offset = (page - 1) * limit;
+        const { pageNum, limitNum, offset } = parsePagination(page, limit);
+
         const where = { deviceId };
-        
-        // Add date filters if provided
-        if (startDate || endDate) {
-            where.createdAt = {};
-            if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-            if (endDate) where.createdAt[Op.lte] = new Date(endDate);
-        }
+        const dateFilter = buildDateFilter(startDate, endDate);
+        if (dateFilter) where.createdAt = dateFilter;
 
-        const { count, rows: screenshots } = await Screenshot.findAndCountAll({
+        const { count, rows } = await Screenshot.findAndCountAll({
             where,
             order: [['createdAt', 'DESC']],
-            limit: parseInt(limit),
-            offset: parseInt(offset),
+            limit: limitNum,
+            offset,
             include: [{
                 model: Device,
                 attributes: ['id', 'deviceName']
@@ -41,27 +41,23 @@ const getScreenshots = async (req, res) => {
 
         return res.json({
             success: true,
-            data: screenshots,
+            data: rows,
             pagination: {
                 total: count,
-                page: parseInt(page),
-                totalPages: Math.ceil(count / limit)
+                page: pageNum,
+                totalPages: Math.ceil(count / limitNum)
             }
         });
 
     } catch (error) {
-        logger.error('Error fetching screenshots:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch screenshots',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+        return serverError(res, 'Failed to fetch screenshots', error);
     }
 };
 
-/**
- * Get a single screenshot by ID
- */
+/* ------------------------------------------------------------------
+ * Get single screenshot
+ * ------------------------------------------------------------------ */
+
 const getScreenshot = async (req, res) => {
     try {
         const { id } = req.params;
@@ -95,17 +91,14 @@ const getScreenshot = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error fetching screenshot:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch screenshot'
-        });
+        return serverError(res, 'Failed to fetch screenshot', error);
     }
 };
 
-/**
+/* ------------------------------------------------------------------
  * Delete screenshots
- */
+ * ------------------------------------------------------------------ */
+
 const deleteScreenshots = async (req, res) => {
     try {
         const { deviceId } = req.params;
@@ -121,7 +114,7 @@ const deleteScreenshots = async (req, res) => {
         // Verify all screenshots belong to the device
         const screenshots = await Screenshot.findAll({
             where: {
-                id: screenshotIds,
+                id: { [Op.in]: screenshotIds },
                 deviceId
             }
         });
@@ -133,23 +126,13 @@ const deleteScreenshots = async (req, res) => {
             });
         }
 
-        // Delete files from storage
-        for (const screenshot of screenshots) {
-            if (screenshot.filePath && fs.existsSync(screenshot.filePath)) {
-                fs.unlinkSync(screenshot.filePath);
-            }
-            
-            // Delete thumbnail if exists
-            if (screenshot.thumbnailPath && fs.existsSync(screenshot.thumbnailPath)) {
-                fs.unlinkSync(screenshot.thumbnailPath);
-            }
-        }
+        screenshots.forEach(s => {
+            safeUnlink(s.filePath);
+            safeUnlink(s.thumbnailPath);
+        });
 
-        // Delete from database
         await Screenshot.destroy({
-            where: {
-                id: screenshotIds
-            }
+            where: { id: { [Op.in]: screenshotIds } }
         });
 
         return res.json({
@@ -158,29 +141,22 @@ const deleteScreenshots = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error deleting screenshots:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to delete screenshots'
-        });
+        return serverError(res, 'Failed to delete screenshots', error);
     }
 };
 
-/**
- * Get screenshot statistics
- */
+/* ------------------------------------------------------------------
+ * Screenshot statistics
+ * ------------------------------------------------------------------ */
+
 const getScreenshotStats = async (req, res) => {
     try {
         const { deviceId } = req.params;
         const { startDate, endDate } = req.query;
 
         const where = { deviceId };
-        
-        if (startDate || endDate) {
-            where.createdAt = {};
-            if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-            if (endDate) where.createdAt[Op.lte] = new Date(endDate);
-        }
+        const dateFilter = buildDateFilter(startDate, endDate);
+        if (dateFilter) where.createdAt = dateFilter;
 
         const stats = await Screenshot.findOne({
             attributes: [
@@ -194,49 +170,46 @@ const getScreenshotStats = async (req, res) => {
         // Get screenshots by date (last 30 days)
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
+
         const dailyStats = await Screenshot.findAll({
             attributes: [
                 [Screenshot.sequelize.fn('DATE', Screenshot.sequelize.col('createdAt')), 'date'],
                 [Screenshot.sequelize.fn('COUNT', Screenshot.sequelize.col('id')), 'count']
             ],
             where: {
-                ...where,
+                deviceId,
                 createdAt: { [Op.gte]: thirtyDaysAgo }
             },
             group: [Screenshot.sequelize.fn('DATE', Screenshot.sequelize.col('createdAt'))],
-            raw: true,
-            order: [['date', 'ASC']]
+            order: [['date', 'ASC']],
+            raw: true
         });
 
         return res.json({
             success: true,
             data: {
-                totalScreenshots: parseInt(stats.totalScreenshots) || 0,
-                totalSize: parseInt(stats.totalSize) || 0,
+                totalScreenshots: Number(stats?.totalScreenshots) || 0,
+                totalSize: Number(stats?.totalSize) || 0,
                 dailyStats: dailyStats.reduce((acc, { date, count }) => {
-                    acc[date] = parseInt(count);
+                    acc[date] = Number(count);
                     return acc;
                 }, {})
             }
         });
 
     } catch (error) {
-        logger.error('Error getting screenshot stats:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to get screenshot statistics'
-        });
+        return serverError(res, 'Failed to get screenshot statistics', error);
     }
 };
 
-/**
- * Take a new screenshot
- */
+/* ------------------------------------------------------------------
+ * Take screenshot
+ * ------------------------------------------------------------------ */
+
 const takeScreenshot = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
+        const {
             quality = 'high',
             width,
             height,
@@ -248,10 +221,10 @@ const takeScreenshot = async (req, res) => {
             id: uuidv4(),
             deviceId,
             status: 'pending',
-            quality,
-            width,
-            height,
-            delay
+            quality: String(quality),
+            width: width != null ? Number(width) : null,
+            height: height != null ? Number(height) : null,
+            delay: Number(delay)
         });
 
         // TODO: Send command to device to take screenshot
@@ -267,18 +240,18 @@ const takeScreenshot = async (req, res) => {
             success: true,
             data: {
                 screenshotId: screenshot.id,
-                status: 'pending'
+                status: screenshot.status
             }
         });
 
     } catch (error) {
-        logger.error('Error taking screenshot:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to take screenshot'
-        });
+        return serverError(res, 'Failed to take screenshot', error);
     }
 };
+
+/* ------------------------------------------------------------------
+ * Exports
+ * ------------------------------------------------------------------ */
 
 module.exports = {
     getScreenshots,

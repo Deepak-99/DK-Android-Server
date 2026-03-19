@@ -1,6 +1,6 @@
-const { Media, Device } = require('../../../models');
+const { Media, Device } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs').promises;
@@ -105,7 +105,7 @@ async function processMediaFile(deviceId, file) {
 
     const filePath = path.join(UPLOAD_DIR, file.path);
     const fileDir = path.dirname(filePath);
-    
+
     // Ensure directory exists
     await fs.mkdir(fileDir, { recursive: true });
 
@@ -167,7 +167,7 @@ async function processMediaFile(deviceId, file) {
  */
 async function generateImageThumbnail(imagePath, fileId) {
     const thumbnailPath = path.join(THUMBNAIL_DIR, `${fileId}.jpg`);
-    
+
     try {
         await sharp(imagePath)
             .resize(200, 200, {
@@ -176,7 +176,7 @@ async function generateImageThumbnail(imagePath, fileId) {
             })
             .jpeg({ quality: 80 })
             .toFile(thumbnailPath);
-            
+
         return thumbnailPath;
     } catch (error) {
         logger.error('Error generating image thumbnail:', error);
@@ -189,7 +189,7 @@ async function generateImageThumbnail(imagePath, fileId) {
  */
 async function generateVideoThumbnail(videoPath, fileId) {
     const thumbnailPath = path.join(THUMBNAIL_DIR, `${fileId}.jpg`);
-    
+
     try {
         await new Promise((resolve, reject) => {
             ffmpeg(videoPath)
@@ -202,7 +202,7 @@ async function generateVideoThumbnail(videoPath, fileId) {
                 .on('end', resolve)
                 .on('error', reject);
         });
-        
+
         return thumbnailPath;
     } catch (error) {
         logger.error('Error generating video thumbnail:', error);
@@ -216,7 +216,7 @@ async function generateVideoThumbnail(videoPath, fileId) {
 exports.getMediaFiles = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
+        const {
             type,
             mimeType,
             minSize,
@@ -232,7 +232,7 @@ exports.getMediaFiles = async (req, res) => {
 
         // Build where clause
         const where = { deviceId };
-        
+
         // Filter by type
         if (type) {
             where.type = type;
@@ -286,8 +286,8 @@ exports.getMediaFiles = async (req, res) => {
         const files = rows.map(media => ({
             ...media.toJSON(),
             url: `/api/v1/media/${deviceId}/file/${encodeURIComponent(media.path)}`,
-            thumbnailUrl: media.thumbnailPath 
-                ? `/api/v1/media/${deviceId}/thumbnail/${encodeURIComponent(media.thumbnailPath)}` 
+            thumbnailUrl: media.thumbnailPath
+                ? `/api/v1/media/${deviceId}/thumbnail/${encodeURIComponent(media.thumbnailPath)}`
                 : null
         }));
 
@@ -316,7 +316,7 @@ exports.getMediaFiles = async (req, res) => {
 exports.streamMedia = async (req, res) => {
     try {
         const { deviceId, filePath } = req.params;
-        
+
         // Validate file path to prevent directory traversal
         if (filePath.includes('..') || path.isAbsolute(filePath)) {
             return res.status(400).json({
@@ -326,7 +326,7 @@ exports.streamMedia = async (req, res) => {
         }
 
         const fullPath = path.join(UPLOAD_DIR, filePath);
-        
+
         // Check if file exists
         try {
             await fs.access(fullPath);
@@ -352,7 +352,7 @@ exports.streamMedia = async (req, res) => {
             const start = parseInt(parts[0], 10);
             const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
             const chunkSize = (end - start) + 1;
-            
+
             res.writeHead(206, {
                 'Content-Range': `bytes ${start}-${end}/${fileSize}`,
                 'Accept-Ranges': 'bytes',
@@ -383,7 +383,7 @@ exports.streamMedia = async (req, res) => {
 exports.serveThumbnail = async (req, res) => {
     try {
         const { deviceId, thumbnailPath } = req.params;
-        
+
         // Validate thumbnail path
         if (thumbnailPath.includes('..') || path.isAbsolute(thumbnailPath)) {
             return res.status(400).json({
@@ -393,7 +393,7 @@ exports.serveThumbnail = async (req, res) => {
         }
 
         const fullPath = path.join(UPLOAD_DIR, thumbnailPath);
-        
+
         // Check if file exists
         try {
             await fs.access(fullPath);
@@ -406,7 +406,7 @@ exports.serveThumbnail = async (req, res) => {
         const oneDay = 86400000;
         res.setHeader('Cache-Control', `public, max-age=${oneDay / 1000}`);
         res.setHeader('Expires', new Date(Date.now() + oneDay).toUTCString());
-        
+
         return res.sendFile(fullPath);
 
     } catch (error) {
@@ -442,14 +442,14 @@ exports.deleteMedia = async (req, res) => {
 
         // Get files to be deleted
         const files = await Media.findAll({ where });
-        
+
         // Delete files from storage
         for (const file of files) {
             try {
                 // Delete main file
                 const filePath = path.join(UPLOAD_DIR, file.path);
                 await fs.unlink(filePath).catch(() => {});
-                
+
                 // Delete thumbnail if exists
                 if (file.thumbnailPath) {
                     const thumbPath = path.join(UPLOAD_DIR, file.thumbnailPath);
@@ -672,8 +672,8 @@ exports.uploadMedia = async (req, res) => {
             data: {
                 ...media.toJSON(),
                 url: `/api/v1/media/${deviceId}/file/${encodeURIComponent(media.path)}`,
-                thumbnailUrl: media.thumbnailPath 
-                    ? `/api/v1/media/${deviceId}/thumbnail/${encodeURIComponent(media.thumbnailPath)}` 
+                thumbnailUrl: media.thumbnailPath
+                    ? `/api/v1/media/${deviceId}/thumbnail/${encodeURIComponent(media.thumbnailPath)}`
                     : null
             }
         });
@@ -732,8 +732,8 @@ exports.searchMedia = async (req, res) => {
         const files = rows.map(media => ({
             ...media.toJSON(),
             url: `/api/v1/media/${deviceId}/file/${encodeURIComponent(media.path)}`,
-            thumbnailUrl: media.thumbnailPath 
-                ? `/api/v1/media/${deviceId}/thumbnail/${encodeURIComponent(media.thumbnailPath)}` 
+            thumbnailUrl: media.thumbnailPath
+                ? `/api/v1/media/${deviceId}/thumbnail/${encodeURIComponent(media.thumbnailPath)}`
                 : null
         }));
 

@@ -27,10 +27,10 @@ export default function RecordingsTable({
                             onChange={() => toggle(r.id)}
                         />
                     </td>
-                    <td>{r.contact_name || r.phone_number}</td>
+                    <td>{r.contactName || r.phoneNumber}</td>
                     <td>{r.duration}s</td>
-                    <td>{(r.size_bytes / 1024 / 1024).toFixed(2)} MB</td>
-                    <td>{new Date(r.created_at).toLocaleString()}</td>
+                    <td>{(r.fileSize / 1024 / 1024).toFixed(2)} MB</td>
+                    <td>{new Date(r.createdAt).toLocaleString()}</td>
                 </tr>
             ))}
             </tbody>

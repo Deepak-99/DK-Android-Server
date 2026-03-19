@@ -1,11 +1,38 @@
+console.log("[AUTH ROUTE] File loading...");
+
 const express = require('express');
+console.log("[AUTH ROUTE] express loaded");
+
 const jwt = require('jsonwebtoken');
+console.log("[AUTH ROUTE] jwt loaded");
+
 const { body, validationResult } = require('express-validator');
-const { User, Device } = require('../config/database');
-const { authenticateToken, authenticateDevice } = require('../middleware/auth');
+console.log("[AUTH ROUTE] express-validator loaded");
+
+/*
+  IMPORTANT: use shared models
+*/
+const db = require('../models');
+console.log("[AUTH ROUTE] shared models loaded");
+
+const { User, Device } = db;
+console.log("[AUTH ROUTE] User & Device models ready");
+
+const auth = require('../middleware/auth');
+console.log("[AUTH ROUTE] auth middleware loaded");
+
+const { authenticateToken, authenticateDevice } = auth;
+
 const logger = require('../utils/logger');
+console.log("[AUTH ROUTE] logger loaded");
 
 const router = express.Router();
+console.log("[AUTH ROUTE] router created");
+
+const authController = require('../controllers/authController');
+console.log("[AUTH ROUTE] authController loaded");
+
+
 
 // Parse JSON bodies for auth routes
 router.use(express.json({ limit: '10mb' }));
@@ -252,19 +279,23 @@ router.post('/device/heartbeat', async (req, res) => {
    TOKEN REFRESH
 ============================= */
 router.post('/refresh', authenticateToken, async (req, res) => {
-  try {
-    const user = req.user;
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-    );
-    res.json({ success: true, token });
-  } catch (error) {
-    logger.error('Token refresh error:', error);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
+    try {
+        const user = req.user;
+
+        const token = jwt.sign(
+            { userId: user.id, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+        );
+
+        res.json({ success: true, token });
+
+    } catch (error) {
+        logger.error('Token refresh error:', error);
+        res.status(500).json({ success: false, error: 'Server error' });
+    }
 });
+
 
 /* =============================
    TOKEN VERIFY
@@ -308,14 +339,12 @@ router.get('/verify', authenticateToken, async (req, res) => {
 /* =============================
    LOGOUT
 ============================= */
-router.post('/logout', authenticateToken, async (req, res) => {
-  try {
-    logger.info(`User logged out: ${req.user?.email}`);
-    res.json({ success: true, message: 'Logged out successfully' });
-  } catch (error) {
-    logger.error('Logout error:', error);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
+
+router.post('/login', authController.login);
+router.get('/me', authenticateToken, authController.me);
+
+router.post('/logout', authenticateToken, authController.logout);
+
+console.log("[AUTH ROUTE] File loaded completely");
 
 module.exports = router;

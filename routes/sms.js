@@ -1,239 +1,125 @@
 const express = require('express');
-const { Op } = require('sequelize');
-const { Device, SMS } = require('../config/database');
-const { authenticateToken, authenticateDevice, requireAdmin } = require('../middleware/auth');
-const logger = require('../utils/logger');
-
 const router = express.Router();
+const { body, param, query } = require('express-validator');
+const { validateRequest } = require('../middleware/validation');
+const smsController = require('../controllers/smsController');
+const { authorize } = require('../middleware/auth');
+const auth = require('../middleware/auth');
 
-// Submit SMS data (Device endpoint)
-router.post('/', authenticateDevice, async (req, res) => {
-  try {
-    const device = await Device.findOne({ where: { device_id: req.deviceId } });
-    if (!device) {
-      return res.status(404).json({
-        success: false,
-        error: 'Device not found'
-      });
-    }
+// Sync SMS messages from device
+router.post(
+    '/:deviceId/sync',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('messages').isArray().withMessage('Messages must be an array'),
+        body('messages.*.messageId').isString().notEmpty(),
+        body('messages.*.address').isString().notEmpty(),
+        body('messages.*.body').isString().notEmpty(),
+        body('messages.*.type').isIn(['inbox', 'sent', 'draft', 'outbox', 'failed', 'queued']),
+        body('messages.*.date').isISO8601(),
+        body('messages.*.threadId').optional().isString(),
+        body('messages.*.status').optional().isString(),
+        body('messages.*.isRead').optional().isBoolean()
+    ],
+    validateRequest,
+    authorize('device'),
+    smsController.syncSms
+);
 
-    const { sms_messages } = req.body;
-    if (!Array.isArray(sms_messages) || sms_messages.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid SMS data'
-      });
-    }
+// Get SMS messages with filters
+router.get(
+    '/:deviceId/messages',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('type').optional().isIn(['inbox', 'sent', 'draft', 'outbox', 'failed', 'queued']),
+        query('threadId').optional().isString(),
+        query('address').optional().isString(),
+        query('search').optional().isString(),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601(),
+        query('read').optional().isBoolean(),
+        query('page').optional().isInt({ min: 1 }),
+        query('limit').optional().isInt({ min: 1, max: 1000 })
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    smsController.getSmsMessages
+);
 
-    const smsData = sms_messages.map(sms => ({
-      device_id: device.id,
-      sms_id: sms.sms_id,
-      thread_id: sms.thread_id,
-      address: sms.address,
-      person: sms.person,
-      date: new Date(sms.date),
-      date_sent: sms.date_sent ? new Date(sms.date_sent) : null,
-      protocol: sms.protocol,
-      read: sms.read || false,
-      status: sms.status,
-      type: sms.type,
-      reply_path_present: sms.reply_path_present || false,
-      subject: sms.subject,
-      body: sms.body,
-      service_center: sms.service_center,
-      locked: sms.locked || false,
-      error_code: sms.error_code,
-      seen: sms.seen || false,
-      sync_timestamp: new Date()
-    }));
+// Get SMS conversations/threads
+router.get(
+    '/:deviceId/threads',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('search').optional().isString(),
+        query('page').optional().isInt({ min: 1 }),
+        query('limit').optional().isInt({ min: 1, max: 1000 })
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    smsController.getSmsThreads
+);
 
-    // Use upsert to handle duplicates
-    const createdSMS = [];
-    for (const smsInfo of smsData) {
-      const [sms, created] = await SMS.findOrCreate({
-        where: {
-          device_id: device.id,
-          sms_id: smsInfo.sms_id
-        },
-        defaults: smsInfo
-      });
+// Get messages in a specific thread
+router.get(
+    '/:deviceId/threads/:threadId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        param('threadId').isString().notEmpty(),
+        query('page').optional().isInt({ min: 1 }),
+        query('limit').optional().isInt({ min: 1, max: 1000 })
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    smsController.getThreadMessages
+);
 
-      if (!created) {
-        await sms.update(smsInfo);
-      }
-      createdSMS.push(sms);
-    }
+// Send a new SMS message
+router.post(
+    '/:deviceId/send',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('address').isString().notEmpty(),
+        body('body').isString().notEmpty(),
+        body('threadId').optional().isString()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    smsController.sendSms
+);
 
-    logger.info(`SMS data received from device: ${req.deviceId}, count: ${sms_messages.length}`);
+// Delete SMS messages
+router.delete(
+    '/:deviceId',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        body('messageIds').optional().isArray(),
+        body('threadId').optional().isString(),
+        body('all').optional().isBoolean()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    smsController.deleteSms
+);
 
-    // Emit to admin room
-    if (req.io) {
-      req.io.to('admin-room').emit('sms-updated', {
-        device_id: req.deviceId,
-        count: createdSMS.length
-      });
-    }
+// Get SMS statistics
+router.get(
+    '/:deviceId/statistics',
+    [
+        param('deviceId').isUUID().withMessage('Invalid device ID'),
+        query('startDate').optional().isISO8601(),
+        query('endDate').optional().isISO8601()
+    ],
+    validateRequest,
+    authorize('admin', 'device'),
+    smsController.getSmsStatistics
+);
 
-    res.json({
-      success: true,
-      message: `${createdSMS.length} SMS messages processed successfully`,
-      data: { count: createdSMS.length }
-    });
-  } catch (error) {
-    logger.error('Submit SMS error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error'
-    });
-  }
-});
+// Dashboard
+router.get('/', auth, smsController.getMessages);
+router.post('/send', auth, smsController.sendMessage);
 
-// Get SMS messages for device (Admin only)
-router.get('/device/:deviceId', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const { page = 1, limit = 50, type, search, thread_id } = req.query;
-    const offset = (page - 1) * limit;
-
-    const device = await Device.findByPk(req.params.deviceId);
-    if (!device) {
-      return res.status(404).json({
-        success: false,
-        error: 'Device not found'
-      });
-    }
-
-    const whereClause = { device_id: device.id, is_deleted: false };
-    
-    if (type) {
-      whereClause.type = type;
-    }
-    
-    if (thread_id) {
-      whereClause.thread_id = thread_id;
-    }
-    
-    if (search) {
-      whereClause[Op.or] = [
-        { address: { [Op.like]: `%${search}%` } },
-        { body: { [Op.like]: `%${search}%` } },
-        { subject: { [Op.like]: `%${search}%` } }
-      ];
-    }
-
-    const { count, rows: smsMessages } = await SMS.findAndCountAll({
-      where: whereClause,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      order: [['date', 'DESC']]
-    });
-
-    res.json({
-      success: true,
-      data: {
-        sms_messages: smsMessages,
-        pagination: {
-          current_page: parseInt(page),
-          total_pages: Math.ceil(count / limit),
-          total_count: count,
-          per_page: parseInt(limit)
-        }
-      }
-    });
-  } catch (error) {
-    logger.error('Get SMS messages error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error'
-    });
-  }
-});
-
-// Get SMS conversations (Admin only)
-router.get('/device/:deviceId/conversations', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const device = await Device.findByPk(req.params.deviceId);
-    if (!device) {
-      return res.status(404).json({
-        success: false,
-        error: 'Device not found'
-      });
-    }
-
-    const conversations = await SMS.findAll({
-      where: { device_id: device.id, is_deleted: false },
-      attributes: [
-        'thread_id',
-        'address',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'message_count'],
-        [sequelize.fn('MAX', sequelize.col('date')), 'last_message_date']
-      ],
-      group: ['thread_id', 'address'],
-      order: [[sequelize.fn('MAX', sequelize.col('date')), 'DESC']]
-    });
-
-    res.json({
-      success: true,
-      data: { conversations }
-    });
-  } catch (error) {
-    logger.error('Get SMS conversations error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error'
-    });
-  }
-});
-
-// Get SMS statistics (Admin only)
-router.get('/stats/device/:deviceId', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const device = await Device.findByPk(req.params.deviceId);
-    if (!device) {
-      return res.status(404).json({
-        success: false,
-        error: 'Device not found'
-      });
-    }
-
-    const totalSMS = await SMS.count({
-      where: { device_id: device.id, is_deleted: false }
-    });
-
-    const sentSMS = await SMS.count({
-      where: { device_id: device.id, type: 'sent', is_deleted: false }
-    });
-
-    const receivedSMS = await SMS.count({
-      where: { device_id: device.id, type: 'inbox', is_deleted: false }
-    });
-
-    const unreadSMS = await SMS.count({
-      where: { device_id: device.id, read: false, is_deleted: false }
-    });
-
-    const recentSMS = await SMS.findAll({
-      where: { device_id: device.id, is_deleted: false },
-      limit: 5,
-      order: [['date', 'DESC']]
-    });
-
-    res.json({
-      success: true,
-      data: {
-        total_sms: totalSMS,
-        sent_sms: sentSMS,
-        received_sms: receivedSMS,
-        unread_sms: unreadSMS,
-        recent_sms: recentSMS
-      }
-    });
-  } catch (error) {
-    logger.error('Get SMS stats error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error'
-    });
-  }
-});
+// Device ingest
+router.post('/sync', smsController.syncMessages);
 
 module.exports = router;

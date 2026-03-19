@@ -1,0 +1,161 @@
+components:
+  schemas:
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: '550e8400-e29b-41d4-a716-446655440000'
+        device_id:
+          type: string
+          example: 'device-123456'
+        name:
+          type: string
+          example: "John's Phone"
+        model:
+          type: string
+          example: 'Pixel 6'
+        manufacturer:
+          type: string
+          example: 'Google'
+        os_version:
+          type: string
+          example: '13.0.0'
+        is_online:
+          type: boolean
+          example: true
+        last_seen:
+          type: string
+          format: date-time
+          example: '2023-01-01T12:00:00Z'
+        created_at:
+          type: string
+          format: date-time
+          example: '2023-01-01T00:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2023-01-01T00:00:00Z'
+        deviceInfo:
+          $ref: '#/components/schemas/DeviceInfo'
+      required:
+        - id
+        - device_id
+        - name
+        - is_online
+
+    DeviceInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: '660e8400-e29b-41d4-a716-446655440001'
+        device_id:
+          type: string
+          example: 'device-123456'
+        battery_level:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 85
+        is_charging:
+          type: boolean
+          example: true
+        storage_used:
+          type: number
+          format: float
+          example: 45.7
+        storage_total:
+          type: number
+          format: float
+          example: 128.0
+        ram_used:
+          type: number
+          format: float
+          example: 3.2
+        ram_total:
+          type: number
+          format: float
+          example: 8.0
+        created_at:
+          type: string
+          format: date-time
+          example: '2023-01-01T00:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2023-01-01T00:00:00Z'
+
+    DeviceListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            devices:
+              type: array
+              items:
+                $ref: '#/components/schemas/Device'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+paths:
+  /api/devices:
+    get:
+      summary: Get all devices
+      description: Retrieve a paginated list of devices (Admin only)
+      tags:
+        - Devices
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of items per page
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [online, offline]
+          description: Filter by device status
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search term to filter devices by name, ID, or model
+      responses:
+        '200':
+          description: List of devices retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Forbidden - Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                success: false
+                error: 'Admin access required'
+                code: 'FORBIDDEN'

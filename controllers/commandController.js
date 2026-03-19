@@ -1,10 +1,11 @@
 // controllers/api/v1/commandController.js
-const { Command, Device, User } = require('../../../models');
+const { Command, Device, User } = require('../models');
 const { Op, QueryTypes, literal } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
-const { publishToQueue } = require('../../../services/messageQueue');
-const { COMMAND_PRIORITIES, COMMAND_STATUSES } = require('../../../constants/commands');
+const { publishToQueue } = require('../services/messageQueue');
+const { COMMAND_PRIORITIES, COMMAND_STATUSES } = require('../constants/commands');
+const WebSocketService = require("../services/WebSocketService");
 
 /**
  * Queue a new command for a device
@@ -87,6 +88,11 @@ exports.queueCommand = async (req, res) => {
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
+};
+
+exports.sendDeviceCommand = async (deviceId, command) => {
+    const ws = global.wsService; // already initialized in server.js
+    return await ws.sendCommand(deviceId, command);
 };
 
 /**
@@ -236,6 +242,25 @@ exports.cancelCommand = async (req, res) => {
         });
     }
 };
+
+exports.startScreenStream = async (req,res)=>{
+    const { deviceId } = req.params;
+    await exports.sendDeviceCommand(deviceId,{
+        type:"SCREEN_STREAM_START",
+        data:{}
+    });
+    res.json({success:true});
+};
+
+exports.stopScreenStream = async (req,res)=>{
+    const { deviceId } = req.params;
+    await exports.sendDeviceCommand(deviceId,{
+        type:"SCREEN_STREAM_STOP",
+        data:{}
+    });
+    res.json({success:true});
+};
+
 
 /**
  * Retry a failed command

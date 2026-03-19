@@ -1,4 +1,4 @@
-import api from "./http";
+import api from './api';
 
 export interface Device {
     id: number;

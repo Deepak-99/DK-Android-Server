@@ -7,7 +7,7 @@ export default function ExplorerView({ files, navigate }: any) {
                 <FileRow
                     key={f.path}
                     entry={f}
-                    onOpen={(entry) => navigate(entry.path)}
+                    onOpen={(entry: { path: any; }) => navigate(entry.path)}
                 />
             ))}
         </div>

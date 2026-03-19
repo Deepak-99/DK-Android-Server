@@ -1,27 +1,70 @@
-const { CallRecording, Device } = require('../../../models');
+const { CallRecording, Device } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 /**
- * Get call recordings for a device
+ * Handle File Upload and Database Entry
+ */
+const uploadRecording = async (req, res) => {
+    const t = await sequelize.transaction(); // Start transaction
+    try {
+        const { deviceId } = req.params;
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No audio file uploaded' });
+        }
+
+        // 1. Verify Device exists
+        const device = await Device.findOne({ where: { id: deviceId } });
+        if (!device) {
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            return res.status(404).json({ success: false, error: 'Device not found' });
+        }
+
+        // 2. Create Database Record
+        const recording = await CallRecording.create({
+            deviceId,
+            phoneNumber: req.body.phoneNumber,
+            contactName: req.body.contactName,
+            type: req.body.type,
+            duration: parseInt(req.body.duration) || 0,
+            filePath: req.file.path,
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            format: path.extname(req.file.originalname).replace('.', ''),
+            status: 'completed'
+        }, { transaction: t });
+
+        await t.commit(); // Save everything
+
+        return res.status(201).json({
+            success: true,
+            data: recording
+        });
+
+    } catch (error) {
+        await t.rollback(); // Undo DB changes
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); // Delete file
+
+        logger.error('Upload error:', error);
+        return res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+};
+
+/**
+ * Get call recordings for a device (Paginated)
  */
 const getCallRecordings = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { 
-            startDate, 
-            endDate, 
-            type,
-            page = 1,
-            limit = 50 
-        } = req.query;
+        const { startDate, endDate, type, page = 1, limit = 50 } = req.query;
 
         const offset = (page - 1) * limit;
         const where = { deviceId };
-        
+
         // Add date filters if provided
         if (startDate || endDate) {
             where.createdAt = {};
@@ -29,20 +72,14 @@ const getCallRecordings = async (req, res) => {
             if (endDate) where.createdAt[Op.lte] = new Date(endDate);
         }
 
-        // Add type filter if provided
-        if (type) {
-            where.type = type;
-        }
+        if (type) where.type = type;
 
         const { count, rows: recordings } = await CallRecording.findAndCountAll({
             where,
             order: [['createdAt', 'DESC']],
             limit: parseInt(limit),
             offset: parseInt(offset),
-            include: [{
-                model: Device,
-                attributes: ['id', 'deviceName']
-            }]
+            include: [{ model: Device, attributes: ['id', 'deviceName'] }]
         });
 
         return res.json({
@@ -92,16 +129,13 @@ const getCallRecording = async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('Error fetching call recording:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch call recording'
-        });
+        logger.error('Fetch error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch recordings' });
     }
 };
 
 /**
- * Delete call recordings
+ * Delete call recordings (Database + Physical File)
  */
 const deleteCallRecordings = async (req, res) => {
     try {
@@ -117,44 +151,27 @@ const deleteCallRecordings = async (req, res) => {
 
         // Verify all recordings belong to the device
         const recordings = await CallRecording.findAll({
-            where: {
-                id: recordingIds,
-                deviceId
-            }
+            where: { id: recordingIds, deviceId }
         });
 
-        if (recordings.length !== recordingIds.length) {
-            return res.status(404).json({
-                success: false,
-                error: 'One or more recordings not found or access denied'
-            });
+        if (recordings.length === 0) {
+            return res.status(404).json({ success: false, error: 'No recordings found' });
         }
 
-        // Delete files from storage
-        for (const recording of recordings) {
-            if (recording.filePath && fs.existsSync(recording.filePath)) {
-                fs.unlinkSync(recording.filePath);
+        // Physical deletion
+        for (const rec of recordings) {
+            if (rec.filePath && fs.existsSync(rec.filePath)) {
+                fs.unlinkSync(rec.filePath);
             }
         }
 
-        // Delete from database
-        await CallRecording.destroy({
-            where: {
-                id: recordingIds
-            }
-        });
+        // Database deletion
+        await CallRecording.destroy({ where: { id: recordingIds } });
 
-        return res.json({
-            success: true,
-            message: `${recordings.length} recording(s) deleted successfully`
-        });
-
+        return res.json({ success: true, message: `Deleted ${recordings.length} recordings` });
     } catch (error) {
-        logger.error('Error deleting call recordings:', error);
-        return res.status(500).json({
-            success: false,
-            error: 'Failed to delete call recordings'
-        });
+        logger.error('Delete error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to delete' });
     }
 };
 
@@ -167,7 +184,7 @@ const getCallRecordingStats = async (req, res) => {
         const { startDate, endDate } = req.query;
 
         const where = { deviceId };
-        
+
         if (startDate || endDate) {
             where.createdAt = {};
             if (startDate) where.createdAt[Op.gte] = new Date(startDate);
@@ -215,6 +232,7 @@ const getCallRecordingStats = async (req, res) => {
 };
 
 module.exports = {
+    uploadRecording,
     getCallRecordings,
     getCallRecording,
     deleteCallRecordings,

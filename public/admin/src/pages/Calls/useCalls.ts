@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { callsApi } from "@/services/callsApi";
+import { callsApi } from "../../services/callsApi";
 import { CallLog } from "./types";
-import { useWebSocket } from "@/hooks/useWebSocket";
+import { useWebSocket } from "../../hooks/useWebSocket";
 
 export function useCalls(deviceId: string) {
     const [calls, setCalls] = useState<CallLog[]>([]);

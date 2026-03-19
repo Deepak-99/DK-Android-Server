@@ -8,6 +8,7 @@ export default function LocationPage({ deviceId }: any) {
 
     return (
         <div className="flex flex-col h-full">
+
             <div className="flex-1">
                 <MapView points={points} live={live} />
             </div>
@@ -16,6 +17,7 @@ export default function LocationPage({ deviceId }: any) {
                 <LocationStats points={points} live={live} />
                 <Timeline points={points} />
             </div>
+
         </div>
     );
 }

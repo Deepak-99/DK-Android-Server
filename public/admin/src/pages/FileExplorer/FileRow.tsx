@@ -1,7 +1,8 @@
-import { downloadManager } from "@/services/downloadManager";
-import { fileApi } from "@/services/fileApi";
+import { downloadManager } from "../../services/downloadManager";
+import { fileApi } from "../../services/fileApi";
 
 export default function FileRow({ entry, onOpen }: any) {
+
     const download = () => {
         downloadManager.enqueue({
             id: crypto.randomUUID(),
@@ -23,7 +24,11 @@ export default function FileRow({ entry, onOpen }: any) {
     };
 
     const remove = async () => {
-        await fileApi.delete(entry.path);
+        try {
+            await fileApi.delete(entry.path);
+        } catch (err) {
+            console.error("Delete failed:", err);
+        }
     };
 
     return (
@@ -37,9 +42,26 @@ export default function FileRow({ entry, onOpen }: any) {
 
             <div className="flex gap-3">
                 {entry.type === "file" && (
-                    <button className="text-blue-400" onClick={(e) => { e.stopPropagation(); download(); }}>Download</button>
+                    <button
+                        className="text-blue-400"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            download();
+                        }}
+                    >
+                        Download
+                    </button>
                 )}
-                <button className="text-red-400" onClick={(e) => { e.stopPropagation(); remove(); }}>Delete</button>
+
+                <button
+                    className="text-red-400"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void remove();   // ✅ fixed
+                    }}
+                >
+                    Delete
+                </button>
             </div>
         </div>
     );

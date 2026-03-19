@@ -1,7 +1,7 @@
 // controllers/api/v1/deviceController.js
-const { Device, DeviceStatus, User } = require('../../../models');
+const { Device, DeviceStatus, User } = require('../models');
 const { Op } = require('sequelize');
-const logger = require('../../../utils/logger');
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 
@@ -103,7 +103,7 @@ exports.getAllDevices = async (req, res) => {
     try {
         const { page = 1, limit = 10, status } = req.query;
         const offset = (page - 1) * limit;
-        
+
         const whereClause = {};
         if (status) {
             whereClause.status = status;
