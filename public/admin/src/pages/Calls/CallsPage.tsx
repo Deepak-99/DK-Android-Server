@@ -21,7 +21,7 @@ export default function CallsPage({ deviceId }: { deviceId: string }) {
 
   useEffect(() => {
     callsApi.stats(deviceId)
-      .then((r) => setStats(r.data))
+      .then((r: { data: any; }) => setStats(r.data))
       .catch(() => {
         setError("Failed to load call statistics");
       });

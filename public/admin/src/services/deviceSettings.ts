@@ -223,7 +223,7 @@ export const clearAppData = async (deviceId: string, packageName: string): Promi
 
 // Device Information
 export const getDeviceInfo = async (deviceId: string): Promise<DeviceInfo> => {
-    const response = await api.get(`/devices/${deviceId}/info`);
+    const response = await api.get(`/devices/${deviceId}`);
     return response.data;
 };
 

@@ -6,7 +6,7 @@ import CommandResultViewer from "./CommandResultViewer";
 
 export default function CommandCenterPage({ deviceId }: any) {
 
-    const { commands, reload } = useCommands(deviceId);
+    const { list: commands, reload } = useCommands(deviceId);
 
     const [active, setActive] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);

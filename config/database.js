@@ -19,6 +19,12 @@ const dbConfig = {
   port: parseInt(process.env.DB_PORT || "3306", 10),
   dialect: "mysql",
 
+    define: {
+        underscored: true,
+        timestamps: true,
+        freezeTableName: true
+    },
+
   /* -------------------------------------------------
      ENABLE SQL DEBUG LOGGING
   -------------------------------------------------- */

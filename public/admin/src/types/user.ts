@@ -11,6 +11,9 @@ export interface User {
     createdAt: string;
     updatedAt: string;
     avatar?: string;
+    twoFactorEnabled?: boolean;
+    lastLoginIp?: string;
+    lastLoginUserAgent?: string;
 }
 
 export interface CreateUserDto {

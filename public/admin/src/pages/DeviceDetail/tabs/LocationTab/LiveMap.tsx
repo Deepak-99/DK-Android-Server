@@ -1,5 +1,5 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
+
 
 export default function LiveMap({ latest }: { latest: any }) {
     if (!latest) return null;

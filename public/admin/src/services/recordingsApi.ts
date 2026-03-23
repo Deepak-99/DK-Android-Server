@@ -1,4 +1,4 @@
-import api from "@/services/apiBase";
+import api from "@/services/api";
 import { CallRecording } from "../pages/CallRecordings/types";
 
 export const recordingsApi = {

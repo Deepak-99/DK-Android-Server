@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { smsApi } from "@/services/smsApi";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { SMSThread, SMSMessage } from "./types";
+import { SMSConversation, SMSMessage } from "./types";
 
 export function useSMS(deviceId: string) {
   const [list, setList] = useState<SMSMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [threads, setThreads] = useState<SMSThread[]>([]);
+  const [threads, setThreads] = useState<SMSConversation[]>([]);
   const [messages, setMessages] = useState<SMSMessage[]>([]);
   const [activeThread, setActiveThread] = useState<string | null>(null);
 

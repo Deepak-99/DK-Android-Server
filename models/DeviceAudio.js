@@ -1,165 +1,142 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-    const DeviceAudio = sequelize.define('DeviceAudio', {
-      id: {
-          type: DataTypes.UUID,
-          defaultValue: DataTypes.UUIDV4,
-          primaryKey: true
-      },
-      deviceId: {
-          type: DataTypes.STRING,
-          allowNull: false,
-          field: 'deviceId',
-          references: {
-              model: 'devices',
-              key: 'deviceId',
-              onDelete: 'CASCADE',
-              onUpdate: 'CASCADE'
-          },
-          comment: 'Reference to devices table (deviceId)'
-      },
-      ringer_mode: {
-          type: DataTypes.ENUM('silent', 'vibrate', 'normal', 'unknown'),
-          allowNull: false,
-          defaultValue: 'unknown'
-      },
-      music_volume: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          validate: {
-              min: 0,
-              max: 100
-          },
-          comment: 'Music/Media volume level (0-100)'
-      },
-      ring_volume: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          validate: {
-              min: 0,
-              max: 100
-          },
-          comment: 'Ring volume level (0-100)'
-      },
-      call_volume: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          validate: {
-              min: 0,
-              max: 100
-          },
-          comment: 'Call volume level (0-100)'
-      },
-      alarm_volume: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          validate: {
-              min: 0,
-              max: 100
-          },
-          comment: 'Alarm volume level (0-100)'
-      },
-      notification_volume: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          validate: {
-              min: 0,
-              max: 100
-          },
-          comment: 'Notification volume level (0-100)'
-      },
-      system_volume: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          validate: {
-              min: 0,
-              max: 100
-          },
-          comment: 'System volume level (0-100)'
-      },
-      is_speaker_on: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-          comment: 'Whether speaker is enabled'
-      },
-      is_microphone_muted: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-          comment: 'Whether microphone is muted'
-      },
-      audio_mode: {
-          type: DataTypes.STRING,
-          allowNull: true,
-          comment: 'Current audio mode (normal, in_call, in_communication, ringtone)'
-      },
-      bluetooth_audio_connected: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-          comment: 'Whether Bluetooth audio device is connected'
-      },
-      wired_headset_connected: {
-          type: DataTypes.BOOLEAN,
-          defaultValue: false,
-          comment: 'Whether wired headset is connected'
-      },
-      audio_focus_state: {
-          type: DataTypes.STRING,
-          allowNull: true,
-          comment: 'Current audio focus state'
-      },
-      recording_file_path: {
-          type: DataTypes.STRING,
-          allowNull: true,
-          comment: 'Path to recorded audio file'
-      },
-      recording_duration: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          comment: 'Duration of recording in seconds'
-      },
-      recording_format: {
-          type: DataTypes.STRING,
-          allowNull: true,
-          comment: 'Audio recording format (mp3, wav, etc.)'
-      },
-      recording_quality: {
-          type: DataTypes.STRING,
-          comment: 'Recording quality setting'
-      },
-      timestamp: {
-          type: DataTypes.DATE,
-          defaultValue: DataTypes.NOW
-      }
-  }, {
-      tableName: 'device_audio',
-      timestamps: true,
-      underscored: true,
 
-      indexes: [
-          {
-              name: 'idx_device_audio_device_id',
-              fields: ['deviceId']
-          },
-          {
-              name: 'idx_device_audio_created_at',
-              fields: ['createdAt']
-          },
-          {
-              name: 'idx_device_audio_ringer_mode',
-              fields: ['ringer_mode']
-          },
-          {
-              name: 'idx_device_audio_timestamp',
-              fields: ['timestamp']
-          }
-      ]
+  const DeviceAudio = sequelize.define('DeviceAudio', {
+
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
+
+    deviceId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      field: 'device_id',
+      references: {
+        model: 'devices',
+        key: 'device_id'
+      }
+    },
+
+    ringerMode: {
+      type: DataTypes.ENUM('silent', 'vibrate', 'normal', 'unknown'),
+      field: 'ringer_mode',
+      defaultValue: 'unknown'
+    },
+
+    musicVolume: {
+      type: DataTypes.INTEGER,
+      field: 'music_volume',
+      validate: { min: 0, max: 100 }
+    },
+
+    ringVolume: {
+      type: DataTypes.INTEGER,
+      field: 'ring_volume',
+      validate: { min: 0, max: 100 }
+    },
+
+    callVolume: {
+      type: DataTypes.INTEGER,
+      field: 'call_volume',
+      validate: { min: 0, max: 100 }
+    },
+
+    alarmVolume: {
+      type: DataTypes.INTEGER,
+      field: 'alarm_volume',
+      validate: { min: 0, max: 100 }
+    },
+
+    notificationVolume: {
+      type: DataTypes.INTEGER,
+      field: 'notification_volume',
+      validate: { min: 0, max: 100 }
+    },
+
+    systemVolume: {
+      type: DataTypes.INTEGER,
+      field: 'system_volume',
+      validate: { min: 0, max: 100 }
+    },
+
+    isSpeakerOn: {
+      type: DataTypes.BOOLEAN,
+      field: 'is_speaker_on',
+      defaultValue: false
+    },
+
+    isMicrophoneMuted: {
+      type: DataTypes.BOOLEAN,
+      field: 'is_microphone_muted',
+      defaultValue: false
+    },
+
+    audioMode: {
+      type: DataTypes.STRING,
+      field: 'audio_mode'
+    },
+
+    bluetoothAudioConnected: {
+      type: DataTypes.BOOLEAN,
+      field: 'bluetooth_audio_connected',
+      defaultValue: false
+    },
+
+    wiredHeadsetConnected: {
+      type: DataTypes.BOOLEAN,
+      field: 'wired_headset_connected',
+      defaultValue: false
+    },
+
+    audioFocusState: {
+      type: DataTypes.STRING,
+      field: 'audio_focus_state'
+    },
+
+    recordingFilePath: {
+      type: DataTypes.STRING,
+      field: 'recording_file_path'
+    },
+
+    recordingDuration: {
+      type: DataTypes.INTEGER,
+      field: 'recording_duration'
+    },
+
+    recordingFormat: {
+      type: DataTypes.STRING,
+      field: 'recording_format'
+    },
+
+    recordingQuality: {
+      type: DataTypes.STRING,
+      field: 'recording_quality'
+    },
+
+    timestamp: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    }
+
+  }, {
+    tableName: 'device_audio',
+    timestamps: true,
+    underscored: true,
+    indexes: [
+      { fields: ['device_id'] },
+      { fields: ['created_at'] },
+      { fields: ['ringer_mode'] },
+      { fields: ['timestamp'] }
+    ]
   });
 
-  // Define associations
-  DeviceAudio.associate = function(models) {
+  DeviceAudio.associate = (models) => {
     DeviceAudio.belongsTo(models.Device, {
-      foreignKey: 'device_id',
+      foreignKey: 'deviceId',
+      targetKey: 'deviceId',
       as: 'device'
     });
   };

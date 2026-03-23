@@ -1,8 +1,10 @@
 import { Routes, Route } from "react-router-dom";
 import LoginPage from "@/pages/Login/LoginPage";
-import DashboardPage from "@/pages/Dashboard/DashboardPage";
 import NotFoundPage from "@/pages/NotFound/NotFoundPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import DevicesPage from "@/pages/devices/DevicesPage";
+import DashboardPage from "@/pages/dashboard/DashboardPage";
+import DeviceDetailPage from "@/pages/DeviceDetail/DeviceDetailPage";
 
 export default function Router() {
     return (

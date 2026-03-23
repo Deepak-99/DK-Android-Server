@@ -1,160 +1,143 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-    return sequelize.define('MediaFile', {
-      id: {
-          type: DataTypes.INTEGER.UNSIGNED,
-          autoIncrement: true,
-          primaryKey: true
-      },
-      deviceId: {
-          type: DataTypes.STRING,
-          allowNull: false,
-          field: 'deviceId',
-          references: {
-              model: 'devices',
-              key: 'deviceId',
-              onDelete: 'CASCADE',
-              onUpdate: 'CASCADE'
-          },
-          comment: 'Reference to devices table (deviceId)'
-      },
-      filename: {
-          type: DataTypes.STRING,
-          allowNull: false
-      },
-      original_name: {
-          type: DataTypes.STRING,
-          allowNull: false
-      },
-      file_path: {
-          type: DataTypes.STRING,
-          allowNull: false
-      },
-      file_size: {
-          type: DataTypes.BIGINT,
-          allowNull: false,
-          comment: 'File size in bytes'
-      },
-      mime_type: {
-          type: DataTypes.STRING,
-          allowNull: false
-      },
-      media_type: {
-          type: DataTypes.ENUM('image', 'video', 'audio', 'document', 'other'),
-          allowNull: false
-      },
-      duration: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          comment: 'Duration in seconds for video/audio files'
-      },
-      width: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          comment: 'Width in pixels for images/videos'
-      },
-      height: {
-          type: DataTypes.INTEGER,
-          allowNull: true,
-          comment: 'Height in pixels for images/videos'
-      },
-      thumbnail_path: {
-          type: DataTypes.STRING,
-          allowNull: true
-      },
-      captured_at: {
-          type: DataTypes.DATE,
-          allowNull: true,
-          comment: 'When the media was originally captured'
-      },
-      location_latitude: {
-          type: DataTypes.DECIMAL(10, 8),
-          allowNull: true
-      },
-      location_longitude: {
-          type: DataTypes.DECIMAL(11, 8),
-          allowNull: true
-      },
-      upload_status: {
-          type: DataTypes.ENUM('pending', 'uploading', 'completed', 'failed'),
-          defaultValue: 'pending'
-      },
-      upload_progress: {
-          type: DataTypes.INTEGER,
-          defaultValue: 0,
-          validate: {
-              min: 0,
-              max: 100
-          }
-      },
-      metadata: {
-          type: DataTypes.JSON,
-          allowNull: true,
-          comment: 'Additional metadata like EXIF data'
-      },
-      isDeleted: {
-          type: DataTypes.BOOLEAN,
-          field: 'is_deleted',
-          defaultValue: false,
-          comment: 'Soft delete flag'
-      },
-      createdBy: {
-          type: DataTypes.STRING,
-          field: 'created_by',
-          allowNull: true,
-          comment: 'User who created this record'
-      },
-      updatedBy: {
-          type: DataTypes.STRING,
-          field: 'updated_by',
-          allowNull: true,
-          comment: 'User who last updated this record'
-      },
-      lastAccessed: {
-          type: DataTypes.DATE,
-          field: 'last_accessed',
-          allowNull: true,
-          comment: 'When the file was last accessed'
-      },
-      tags: {
-          type: DataTypes.JSON,
-          allowNull: true,
-          comment: 'Tags for categorizing the media file'
-      },
-      isFavorite: {
-          type: DataTypes.BOOLEAN,
-          field: 'is_favorite',
-          defaultValue: false,
-          comment: 'Whether the file is marked as favorite'
-      },
-      viewCount: {
-          type: DataTypes.INTEGER,
-          field: 'view_count',
-          defaultValue: 0,
-          comment: 'Number of times the file has been viewed'
-      }
-  }, {
-      tableName: 'media_files',
-      underscored: false,
 
-      indexes: [
-          {
-              fields: ['deviceId']
-          },
-          {
-              fields: ['media_type']
-          },
-          {
-              fields: ['captured_at']
-          },
-          {
-              fields: ['upload_status']
-          }
-      ]
+  const MediaFile = sequelize.define('MediaFile', {
+
+    id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      autoIncrement: true,
+      primaryKey: true
+    },
+
+    deviceId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      field: 'device_id'
+    },
+
+    filename: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+
+    originalName: {
+      type: DataTypes.STRING,
+      field: 'original_name',
+      allowNull: false
+    },
+
+    filePath: {
+      type: DataTypes.STRING,
+      field: 'file_path',
+      allowNull: false
+    },
+
+    fileSize: {
+      type: DataTypes.BIGINT,
+      field: 'file_size',
+      allowNull: false
+    },
+
+    mimeType: {
+      type: DataTypes.STRING,
+      field: 'mime_type',
+      allowNull: false
+    },
+
+    mediaType: {
+      type: DataTypes.ENUM('image','video','audio','document','other'),
+      field: 'media_type',
+      allowNull: false
+    },
+
+    duration: DataTypes.INTEGER,
+
+    width: DataTypes.INTEGER,
+
+    height: DataTypes.INTEGER,
+
+    thumbnailPath: {
+      type: DataTypes.STRING,
+      field: 'thumbnail_path'
+    },
+
+    capturedAt: {
+      type: DataTypes.DATE,
+      field: 'captured_at'
+    },
+
+    locationLatitude: {
+      type: DataTypes.DECIMAL(10, 8),
+      field: 'location_latitude'
+    },
+
+    locationLongitude: {
+      type: DataTypes.DECIMAL(11, 8),
+      field: 'location_longitude'
+    },
+
+    uploadStatus: {
+      type: DataTypes.ENUM('pending','uploading','completed','failed'),
+      field: 'upload_status',
+      defaultValue: 'pending'
+    },
+
+    uploadProgress: {
+      type: DataTypes.INTEGER,
+      field: 'upload_progress',
+      defaultValue: 0
+    },
+
+    metadata: DataTypes.JSON,
+
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      field: 'is_deleted',
+      defaultValue: false
+    },
+
+    createdBy: {
+      type: DataTypes.STRING,
+      field: 'created_by'
+    },
+
+    updatedBy: {
+      type: DataTypes.STRING,
+      field: 'updated_by'
+    },
+
+    lastAccessed: {
+      type: DataTypes.DATE,
+      field: 'last_accessed'
+    },
+
+    tags: DataTypes.JSON,
+
+    isFavorite: {
+      type: DataTypes.BOOLEAN,
+      field: 'is_favorite',
+      defaultValue: false
+    },
+
+    viewCount: {
+      type: DataTypes.INTEGER,
+      field: 'view_count',
+      defaultValue: 0
+    }
+
+  }, {
+    tableName: 'media_files',
+    timestamps: true,
+    underscored: true,
+    indexes: [
+      { fields: ['device_id'] },
+      { fields: ['media_type'] },
+      { fields: ['captured_at'] },
+      { fields: ['upload_status'] }
+    ]
   });
 
-  // Define associations
   MediaFile.associate = (models) => {
     MediaFile.belongsTo(models.Device, {
       foreignKey: 'deviceId',

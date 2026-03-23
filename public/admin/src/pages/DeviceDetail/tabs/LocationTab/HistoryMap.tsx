@@ -9,6 +9,7 @@ export default function HistoryMap({ history }: { history: any[] }) {
     loc.longitude,
   ]);
 
+
   return (
     <div className="h-[350px] rounded-xl overflow-hidden bg-card border border-border">
       <MapContainer

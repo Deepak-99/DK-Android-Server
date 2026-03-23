@@ -12,6 +12,7 @@ function HeatLayer({ history }: { history: any[] }) {
     return null;
 }
 
+
 export default function HeatMap({ history }: { history: any[] }) {
     if (history.length < 5) return null;
 

@@ -8,13 +8,12 @@ import DeviceHeader from "./header/DeviceHeader";
 // Existing feature pages
 import InfoTab from "./tabs/InfoTab";
 import LocationTab from "./tabs/LocationTab/LocationTab";
-
-import FileExplorer from "../Devices/[id]/features/FileExplorer";
-import Commands from "../Devices/[id]/features/Commands";
-import SMS from "../Devices/[id]/features/SMS";
-import Contacts from "../Devices/[id]/features/Contacts";
-import InstalledApps from "../Devices/[id]/features/InstalledApps";
-import CallLogs from "../Devices/[id]/features/CallLogs";
+import FileExplorer from "../devices/[id]/features/FileExplorer";
+import Commands from "../devices/[id]/features/Commands";
+import SMS from "../devices/[id]/features/SMS";
+import { Contacts } from "@mui/icons-material";
+import InstalledApps from "../devices/[id]/features/InstalledApps";
+import CallLogs from "../devices/[id]/features/CallLogs";
 
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();

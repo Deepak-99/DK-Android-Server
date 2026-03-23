@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { saveToken, clearToken, getToken } from "@/utils/token";
+import { setToken, clearToken, getToken } from "@/utils/token";
 import { verifySession } from "../api/auth";
 
 interface AuthState {
@@ -18,7 +18,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     loading: true,
 
     login: (token, user) => {
-        saveToken(token);
+        setToken(token);
         set({ token, user });
     },
 

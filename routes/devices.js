@@ -55,6 +55,7 @@ console.log("[DEVICES ROUTE] registering route GET /");
 
 router.get(
     '/',
+    auth.authenticateToken,
     requireRole('admin'),
     deviceController.getAllDevices
 );
@@ -67,6 +68,7 @@ console.log("[DEVICES ROUTE] registering route GET /:deviceId");
 
 router.get(
     '/:deviceId',
+    auth.authenticateToken,
     [
         param('deviceId').isString().notEmpty(),
     ],

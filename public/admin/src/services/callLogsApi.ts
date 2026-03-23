@@ -1,4 +1,4 @@
-import api from "./apiBase";
+import api from "./api";
 import { CallLog } from "@/pages/CallLogs/types";
 
 export const callLogsApi = {

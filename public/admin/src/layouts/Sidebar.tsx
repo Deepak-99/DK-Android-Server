@@ -30,7 +30,7 @@ export default function Sidebar() {
             {/* MENU */}
             <div className="mt-4 space-y-1">
                 {MENU_ITEMS.map((item) => {
-                    const Icon = (Icons as any)[item.icon];
+                    const Icon = (Icons as Record<string, any>)[item.icon];
 
                     return (
                         <NavLink

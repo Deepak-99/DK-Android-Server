@@ -1,4 +1,5 @@
 import api from './api';
+import { AxiosProgressEvent } from "axios";
 
 export interface StorageVolume {
     id: string;
@@ -297,7 +298,7 @@ export const uploadFile = async (
     volumeId: string,
     path: string,
     file: File,
-    onUploadProgress?: (progressEvent: ProgressEvent) => void
+    onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
 ): Promise<StorageOperationResult> => {
     const formData = new FormData();
     formData.append('file', file);

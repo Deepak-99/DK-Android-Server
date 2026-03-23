@@ -1,4 +1,4 @@
-import api from "@/services/apiBase";
+import api from "@/services/api";
 import { ContactItem } from "@/pages/Contacts/types";
 
 export const contactsApi = {

@@ -110,7 +110,7 @@ export const getAppStats = async (): Promise<AppStats> => {
  * Launch an application
  * @param packageName Package name of the application to launch
  */
-export const launchApp = async (packageName: string, packageName: string): Promise<void> => {
+export const launchApp = async (packageName: string): Promise<void> => {
   try {
     await api.post(`/apps/launch/${encodeURIComponent(packageName)}`);
   } catch (error) {

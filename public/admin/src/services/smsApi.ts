@@ -1,5 +1,6 @@
-import api from "@/services/apiBase";
-import { SMSMessage } from "./types";
+import api from "@/services/api";
+import { SMSMessage } from "../pages/SMS/types";
+import {SMSThread} from "@/services/sms";
 
 export const smsApi = {
   list(deviceId: string, limit = 50) {

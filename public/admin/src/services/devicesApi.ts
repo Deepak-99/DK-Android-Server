@@ -15,20 +15,22 @@ export interface Device {
 
 export interface DeviceListResponse {
     success: boolean;
-    data: {
-        devices: Device[];
-        page: number;
-        limit: number;
+    data: Device[];
+    pagination: {
         total: number;
+        page: number;
+        totalPages: number;
     };
 }
 
 export const devicesApi = {
     async list(page = 1, limit = 20): Promise<DeviceListResponse> {
-        return api.get(`/devices?page=${page}&limit=${limit}`);
+        const res = await api.get(`/devices?page=${page}&limit=${limit}`);
+        return res.data;
     },
 
     async get(id: number) {
-        return api.get(`/devices/${id}`);
+        const res = await api.get(`/devices/${id}`);
+        return res.data;
     }
 };

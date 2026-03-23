@@ -1,4 +1,4 @@
-import api from "../../apiBase";
+import api from "./api";
 import { CommandItem } from "../pages/Commands/types";
 
 export const commandsApi = {

@@ -1,4 +1,4 @@
-import api from "./apiBase";
+import api from "./api";
 
 export const deviceLocationApi = {
     latest(deviceId: string) {

@@ -1,6 +1,5 @@
 // App.tsx
-
-import  {JSX, lazy, Suspense, useEffect, ReactNode} from "react";
+import { lazy, Suspense, ReactNode, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import { ThemeProvider } from "@mui/material/styles";
@@ -19,13 +18,13 @@ import theme from "./theme";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { connect, disconnect } from "./services/websocket";
 
-// --------------------
-// Lazy pages
-// --------------------
+/* --------------------
+   Lazy pages
+-------------------- */
 
-const Login = SuspenseWrapper(() => import("./pages/auth/Login"));
+const Login = SuspenseWrapper(() => import("../src/pages/auth/Login"));
 const Dashboard = SuspenseWrapper(() => import("./pages/dashboard"));
-const Devices = SuspenseWrapper(() => import("./pages/devices/[id]"));
+const Devices = SuspenseWrapper(() => import("./pages/devices/DevicesPage"));
 const DeviceDetails = SuspenseWrapper(() => import("./pages/devices/[id]"));
 
 const CallLogs = SuspenseWrapper(
@@ -40,9 +39,9 @@ const Commands = SuspenseWrapper(
   () => import("./pages/devices/[id]/features/Commands")
 );
 
-// --------------------
-// React Query
-// --------------------
+/* --------------------
+   React Query
+-------------------- */
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,9 +53,9 @@ const queryClient = new QueryClient({
   },
 });
 
-// --------------------
-// Protected Route
-// --------------------
+/* --------------------
+   Protected Route
+-------------------- */
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -68,17 +67,29 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-// --------------------
-// App
-// --------------------
+/* --------------------
+   WebSocket Manager
+-------------------- */
 
-function App() {
+function WebSocketManager() {
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    connect();
-    return () => disconnect();
-  }, []);
+    if (!isAuthenticated) return;
 
+    connect();
+
+    return () => disconnect();
+  }, [isAuthenticated]);
+
+  return null;
+}
+
+/* --------------------
+   App
+-------------------- */
+
+function App() {
   return (
     <ErrorBoundary
       fallback={
@@ -98,14 +109,15 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-
           <Toaster position="top-right" richColors closeButton />
 
-          <AuthProvider>
-            <BrowserRouter>
+          <BrowserRouter>
+            <AuthProvider>
+
+              {/* ✅ WebSocket connects AFTER auth */}
+              <WebSocketManager />
 
               <Routes>
-
                 {/* Public */}
                 <Route path="/login" element={<Login />} />
 
@@ -123,26 +135,27 @@ function App() {
                   <Route path="devices" element={<Devices />} />
 
                   <Route path="devices/:id" element={<DeviceDetails />}>
-                    <Route index element={<Navigate to="call-logs" replace />} />
+                    <Route
+                      index
+                      element={<Navigate to="call-logs" replace />}
+                    />
                     <Route path="call-logs" element={<CallLogs />} />
-                    <Route path="call-recordings" element={<CallRecordings />} />
+                    <Route
+                      path="call-recordings"
+                      element={<CallRecordings />}
+                    />
                     <Route path="commands" element={<Commands />} />
                   </Route>
-
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
-
               </Routes>
+            </AuthProvider>
+          </BrowserRouter>
 
-            </BrowserRouter>
-
-            {process.env.NODE_ENV === "development" && (
-              <ReactQueryDevtools initialIsOpen={false} />
-            )}
-
-          </AuthProvider>
-
+          {process.env.NODE_ENV === "development" && (
+            <ReactQueryDevtools initialIsOpen={false} />
+          )}
         </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
@@ -151,17 +164,18 @@ function App() {
 
 export default App;
 
-// --------------------
-// Lazy helper
-// --------------------
+/* --------------------
+   Lazy helper
+-------------------- */
 
-function SuspenseWrapper(importer: () => Promise<{ default: React.ComponentType<any> }>) {
-    const LazyComponent = lazy(importer);
+function SuspenseWrapper(
+  importer: () => Promise<{ default: React.ComponentType<any> }>
+) {
+  const LazyComponent = lazy(importer);
 
-    return (props: any) => (
-        <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
-            <LazyComponent {...props} />
-        </Suspense>
-    );
+  return (props: any) => (
+    <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
+      <LazyComponent {...props} />
+    </Suspense>
+  );
 }
-

@@ -1,29 +1,46 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-    const UserRole = sequelize.define('UserRole', {
-        id: {
-            type: DataTypes.INTEGER.UNSIGNED,
-            primaryKey: true,
-            autoIncrement: true,
-        },
-        user_id: {
-            type: DataTypes.INTEGER.UNSIGNED,
-            allowNull: false,
-        },
-        role_id: {
-            type: DataTypes.INTEGER.UNSIGNED,
-            allowNull: false,
-        },
-    }, {
-        tableName: 'user_roles',
-        underscored: true,
+
+  const UserRole = sequelize.define('UserRole', {
+
+    id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      primaryKey: true,
+      autoIncrement: true
+    },
+
+    userId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      field: 'user_id',
+      allowNull: false
+    },
+
+    roleId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      field: 'role_id',
+      allowNull: false
+    }
+
+  }, {
+    tableName: 'user_roles',
+    timestamps: true,
+    underscored: true
+  });
+
+  UserRole.associate = (models) => {
+
+    UserRole.belongsTo(models.User, {
+      foreignKey: 'userId',
+      as: 'user'
     });
 
-    UserRole.associate = (models) => {
-        UserRole.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
-        UserRole.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });
-    };
+    UserRole.belongsTo(models.Role, {
+      foreignKey: 'roleId',
+      as: 'role'
+    });
 
-    return UserRole;
+  };
+
+  return UserRole;
 };

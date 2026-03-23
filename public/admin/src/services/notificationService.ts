@@ -77,7 +77,6 @@ export interface NotificationChannel {
     importance: 'none' | 'min' | 'low' | 'default' | 'high' | 'max';
     canBypassDnd: boolean;
     canShowBadge: boolean;
-    description?: string;
     group?: string;
     lightColor: number;
     lockscreenVisibility: 'public' | 'private' | 'secret';

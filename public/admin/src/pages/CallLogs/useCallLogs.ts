@@ -46,13 +46,15 @@ export function useCallLogs(deviceId: string) {
       f = f.filter((l) => l.type === params.type);
     }
 
-    if (params.minDuration) {
-      f = f.filter((l) => l.duration >= params.minDuration);
-    }
+      const { minDuration, maxDuration } = params;
 
-    if (params.maxDuration) {
-      f = f.filter((l) => l.duration <= params.maxDuration);
-    }
+      if (minDuration !== undefined) {
+          f = f.filter((l) => l.duration >= minDuration);
+      }
+
+      if (maxDuration !== undefined) {
+          f = f.filter((l) => l.duration <= maxDuration);
+      }
 
     setFiltered(f);
   }

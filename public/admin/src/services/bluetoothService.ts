@@ -567,3 +567,4 @@ export const getAdapterInfo = async (deviceId: string): Promise<{
     maxLeAudioCodecConfigurationBitsPerSampleMaskedMaskedMaskedMaskedMaskedMaskedMaskedMaskShift: number;
     maxLeAudioCodecConfigurationChannelCountMaskedMaskedMaskedMaskedMaskedMaskedMaskedMaskShift: number;
     maxLeAudioCodecConfigurationFrameDurationMaskedMaskedMaskedMaskedMaskedMaskedMaskedMaskShift: number;
+};

@@ -13,8 +13,7 @@ module.exports = (sequelize) => {
     deviceId: {
       type: DataTypes.STRING,
       allowNull: false,
-      field: "deviceId",
-      comment: "Reference to devices.deviceId"
+      field: "device_id"
     },
 
     filename: {
@@ -22,119 +21,110 @@ module.exports = (sequelize) => {
       allowNull: false
     },
 
-    original_name: {
+    originalName: {
       type: DataTypes.STRING,
+      field: "original_name",
       allowNull: false
     },
 
-    file_path: {
+    filePath: {
       type: DataTypes.STRING,
+      field: "file_path",
       allowNull: false
     },
 
-    file_size: {
+    fileSize: {
       type: DataTypes.BIGINT,
+      field: "file_size",
       allowNull: false
     },
 
-    mime_type: {
+    mimeType: {
       type: DataTypes.STRING,
+      field: "mime_type",
       allowNull: false
     },
 
-    file_type: {
-      type: DataTypes.ENUM(
-        "document",
-        "image",
-        "video",
-        "audio",
-        "archive",
-        "other"
-      ),
+    fileType: {
+      type: DataTypes.ENUM("document","image","video","audio","archive","other"),
+      field: "file_type",
       allowNull: false
     },
 
-    upload_status: {
-      type: DataTypes.ENUM(
-        "pending",
-        "uploading",
-        "completed",
-        "failed"
-      ),
+    uploadStatus: {
+      type: DataTypes.ENUM("pending","uploading","completed","failed"),
+      field: "upload_status",
       defaultValue: "pending"
     },
 
-    upload_progress: {
+    uploadProgress: {
       type: DataTypes.INTEGER,
+      field: "upload_progress",
       defaultValue: 0
     },
 
-    checksum: {
-      type: DataTypes.STRING
+    checksum: DataTypes.STRING,
+
+    metadata: DataTypes.JSON,
+
+    thumbnailPath: {
+      type: DataTypes.STRING,
+      field: "thumbnail_path"
     },
 
-    metadata: {
-      type: DataTypes.JSON
-    },
-
-    thumbnail_path: {
-      type: DataTypes.STRING
-    },
-
-    is_encrypted: {
+    isEncrypted: {
       type: DataTypes.BOOLEAN,
+      field: "is_encrypted",
       defaultValue: false
     },
 
-    encryption_key: {
-      type: DataTypes.STRING
+    encryptionKey: {
+      type: DataTypes.STRING,
+      field: "encryption_key"
     },
 
-    download_count: {
+    downloadCount: {
       type: DataTypes.INTEGER,
+      field: "download_count",
       defaultValue: 0
     },
 
-    last_accessed: {
-      type: DataTypes.DATE
+    lastAccessed: {
+      type: DataTypes.DATE,
+      field: "last_accessed"
     },
 
-    expires_at: {
-      type: DataTypes.DATE
+    expiresAt: {
+      type: DataTypes.DATE,
+      field: "expires_at"
     },
 
-    is_deleted: {
+    isDeleted: {
       type: DataTypes.BOOLEAN,
+      field: "is_deleted",
       defaultValue: false
     }
 
   }, {
-
     tableName: "file_uploads",
     timestamps: true,
-
+    underscored: true,
     indexes: [
-      { name: "idx_file_uploads_device_id", fields: ["deviceId"] },
-      { name: "idx_file_uploads_upload_status", fields: ["upload_status"] },
-      { name: "idx_file_uploads_file_type", fields: ["file_type"] },
-      { name: "idx_file_uploads_created_at", fields: ["created_at"] },
-      { name: "idx_file_uploads_expires_at", fields: ["expires_at"] }
+      { fields: ["device_id"] },
+      { fields: ["upload_status"] },
+      { fields: ["file_type"] },
+      { fields: ["created_at"] },
+      { fields: ["expires_at"] }
     ]
-
   });
 
-  FileUpload.associate = function(models) {
-
+  FileUpload.associate = (models) => {
     FileUpload.belongsTo(models.Device, {
       foreignKey: "deviceId",
       targetKey: "deviceId",
-      as: "device",
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE"
+      as: "device"
     });
-
   };
 
   return FileUpload;
-
 };

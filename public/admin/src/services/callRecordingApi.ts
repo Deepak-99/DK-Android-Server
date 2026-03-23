@@ -1,4 +1,4 @@
-import api from "./apiBase";
+import api from "./api";
 import { CallRecording } from "../pages/CallRecordings/types";
 
 // ----------------------------

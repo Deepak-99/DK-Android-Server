@@ -7,7 +7,7 @@ export default function CallLogList({
     logs: CallLog[];
     onSelect: (l: CallLog) => void;
 }) {
-    const typeColor = {
+    const typeColor: Partial<Record<CallLog["type"], string>> = {
         incoming: "text-green-400",
         outgoing: "text-blue-400",
         missed: "text-yellow-400",
@@ -23,7 +23,7 @@ export default function CallLogList({
                     className="p-4 hover:bg-accent cursor-pointer border-b border-border"
                 >
                     <div className="flex justify-between">
-                        <span className={`font-semibold ${typeColor[l.type]}`}>{l.type}</span>
+                        <span className={`font-semibold ${typeColor[l.type]|| "text-gray-400"}`}>{l.type}</span>
                         <span className="text-xs text-muted-foreground">{new Date(l.timestamp).toLocaleString()}</span>
                     </div>
 

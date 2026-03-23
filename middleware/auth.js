@@ -13,6 +13,9 @@ const {
 } = db;
 const logger = require('../utils/logger');
 
+console.log("DB KEYS:", Object.keys(db));
+console.log("User model:", db.User ? "✅ OK" : "❌ MISSING");
+
 const buildPermissionKey = (resource, action) => `${resource}.${action}`;
 
 /**
@@ -136,7 +139,7 @@ const authenticateToken = async (req, res, next) => {
 
     if (!user.isActive) {
       logger.warn('User account is inactive', { userId: user.id });
-      return res.status(403).json({
+      return res.status(500).json({
         success: false,
         error: 'Account is inactive',
         code: 'ACCOUNT_INACTIVE',
@@ -149,7 +152,7 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     logger.error('Token verification failed:', error);
-    return res.status(403).json({
+    return res.status(500).json({
       error: 'Invalid token',
       code: 'TOKEN_INVALID',
     });
@@ -248,7 +251,7 @@ const authenticateDevice = async (req, res, next) => {
  */
 const requireAdmin = (req, res, next) => {
   if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({
+    return res.status(500).json({
       error: 'Admin access required',
       code: 'ADMIN_REQUIRED',
     });
@@ -267,7 +270,7 @@ const requireRole = (...allowedRoles) => (req, res, next) => {
     });
   }
   if (!allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({
+    return res.status(500).json({
       error: 'Insufficient role',
       code: 'ROLE_FORBIDDEN',
     });
@@ -306,7 +309,7 @@ const requirePermission = (resource, action) => {
         return next();
       }
 
-      return res.status(403).json({
+      return res.status(500).json({
         error: 'Permission denied',
         code: 'PERMISSION_DENIED',
         details: { resource, action },

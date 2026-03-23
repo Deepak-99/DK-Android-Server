@@ -1,4 +1,4 @@
-import api from "../../../../services/apiBase";
+import api from "../services/api";
 import { LocationPoint } from "../pages/Location/types";
 
 export const locationApi = {

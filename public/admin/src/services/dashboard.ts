@@ -1,6 +1,20 @@
-import api from "../api/axios";
+import api from "./api";
 
-export async function getDashboardStats() {
+export const getDashboardStats = async () => {
     const res = await api.get("/dashboard/stats");
-    return res.data;
-}
+
+    const data = res.data?.data || {};
+
+    return {
+        devices: data.totalDevices ?? 0,
+        online: data.activeDevices ?? 0,
+        alerts: data.offlineDevices ?? 0,
+        commands: data.totalCommands ?? 0,
+    };
+};
+
+// NEW
+export const getDashboardOverview = async () => {
+    const res = await api.get("/dashboard/overview");
+    return res.data?.data || {};
+};

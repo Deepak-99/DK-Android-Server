@@ -10,180 +10,149 @@ module.exports = (sequelize, DataTypes) => {
 
     deviceId: {
       type: DataTypes.STRING,
-      field: 'deviceId',
+      field: 'device_id',
       allowNull: false,
       unique: true,
-      comment: 'Unique device identifier from Android',
       validate: {
         notEmpty: { msg: 'Device ID is required' },
         len: { args: [5, 255], msg: 'Device ID must be between 5 and 255 characters' }
       }
     },
 
-    name: { type: DataTypes.STRING, allowNull: true },
-    nickname: { type: DataTypes.STRING(255), allowNull: true },
-    model: { type: DataTypes.STRING, allowNull: true },
-    manufacturer: { type: DataTypes.STRING, allowNull: true },
-    os: { type: DataTypes.STRING, allowNull: true },
+    name: DataTypes.STRING,
+
+    nickname: DataTypes.STRING(255),
+
+    model: DataTypes.STRING,
+
+    manufacturer: DataTypes.STRING,
+
+    os: DataTypes.STRING,
 
     osVersion: {
       type: DataTypes.STRING,
-      allowNull: true,
       field: 'os_version'
     },
 
     isOnline: {
       type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-      field: 'is_online'
+      field: 'is_online',
+      defaultValue: false
     },
 
     lastSeen: {
       type: DataTypes.DATE,
-      field: 'lastSeen',
-      allowNull: true
+      field: 'last_seen'
     },
 
     ipAddress: {
       type: DataTypes.STRING,
       field: 'ip_address',
-      allowNull: true,
       validate: { isIP: true }
     },
 
     macAddress: {
       type: DataTypes.STRING,
-      field: 'macAddress',
-      allowNull: true
+      field: 'mac_address'
     },
 
     userId: {
       type: DataTypes.INTEGER,
-      field: 'userId',
       allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
+      field: 'user_id'
     },
 
     settings: {
       type: DataTypes.TEXT,
-      allowNull: true,
-      field: 'settings',
-
       get() {
         const raw = this.getDataValue('settings');
         return raw ? JSON.parse(raw) : null;
       },
-
       set(value) {
-        this.setDataValue(
-          'settings',
-          value ? JSON.stringify(value) : null
-        );
+        this.setDataValue('settings', value ? JSON.stringify(value) : null);
       }
     },
 
     status: {
-      type: DataTypes.ENUM(
-        'online',
-        'offline',
-        'active',
-        'inactive',
-        'suspended'
-      ),
-      allowNull: false,
-      defaultValue: 'offline',
-      field: 'status'
+      type: DataTypes.ENUM('online', 'offline', 'active', 'inactive', 'suspended'),
+      defaultValue: 'offline'
     },
 
-    imei: { type: DataTypes.STRING, allowNull: true },
-    phoneNumber: { type: DataTypes.STRING, field: 'phone_number', allowNull: true },
+    imei: DataTypes.STRING,
+
+    phoneNumber: {
+      type: DataTypes.STRING,
+      field: 'phone_number'
+    },
 
     registrationDate: {
       type: DataTypes.DATE,
-      field: 'registration_date',
-      allowNull: true
+      field: 'registration_date'
     },
 
     appVersion: {
       type: DataTypes.STRING,
-      field: 'app_version',
-      allowNull: true
+      field: 'app_version'
     },
 
     batteryLevel: {
       type: DataTypes.INTEGER,
       field: 'battery_level',
-      allowNull: true,
       validate: { min: 0, max: 100 }
     },
 
     isCharging: {
       type: DataTypes.BOOLEAN,
       field: 'is_charging',
-      allowNull: false,
       defaultValue: false
     },
 
     networkType: {
       type: DataTypes.STRING,
-      field: 'network_type',
-      allowNull: true
+      field: 'network_type'
     },
 
     locationEnabled: {
       type: DataTypes.BOOLEAN,
       field: 'location_enabled',
-      allowNull: false,
       defaultValue: false
     },
 
     cameraEnabled: {
       type: DataTypes.BOOLEAN,
       field: 'camera_enabled',
-      allowNull: false,
       defaultValue: false
     },
 
     microphoneEnabled: {
       type: DataTypes.BOOLEAN,
       field: 'microphone_enabled',
-      allowNull: false,
       defaultValue: false
     }
 
   }, {
-
     tableName: 'devices',
     timestamps: true,
     paranoid: true,
-    underscored: false,
-
+    underscored: true,
     indexes: [
       {
-        fields: ['deviceId'],
-        name: 'idx_devices_deviceId',
+        fields: ['device_id'],
         unique: true
       },
       {
-        fields: ['userId', 'status'],
-        name: 'idx_user_status'
+        fields: ['user_id', 'status']
       },
       {
-        fields: ['imei'],
-        name: 'idx_imei'
+        fields: ['imei']
       }
     ]
   });
 
-  /* -------------------------------------------------
-     ASSOCIATIONS
-  -------------------------------------------------- */
+  /* ---------------- ASSOCIATIONS ---------------- */
 
   Device.associate = (models) => {
+
     Device.belongsTo(models.User, {
       foreignKey: 'userId',
       as: 'user',
@@ -194,12 +163,11 @@ module.exports = (sequelize, DataTypes) => {
     Device.hasMany(models.Command, {
       foreignKey: 'deviceId',
       sourceKey: 'deviceId',
-      as: 'commands',
-      onDelete: 'CASCADE'
+      as: 'commands'
     });
 
     Device.hasOne(models.DeviceInfo, {
-      foreignKey: { name: 'deviceId', field: 'deviceId' },
+      foreignKey: 'deviceId',
       sourceKey: 'deviceId',
       as: 'deviceInfo'
     });
@@ -212,16 +180,19 @@ module.exports = (sequelize, DataTypes) => {
 
     Device.hasMany(models.CallRecording, {
       foreignKey: 'deviceId',
+      sourceKey: 'deviceId',
       as: 'callRecordings'
     });
 
     Device.hasMany(models.ScreenRecording, {
       foreignKey: 'deviceId',
+      sourceKey: 'deviceId',
       as: 'screenRecordings'
     });
 
     Device.hasMany(models.Screenshot, {
       foreignKey: 'deviceId',
+      sourceKey: 'deviceId',
       as: 'screenshots'
     });
   };

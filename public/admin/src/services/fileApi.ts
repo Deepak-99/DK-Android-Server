@@ -1,4 +1,4 @@
-import api from "./apiBase";
+import api from "./api";
 
 export interface FileEntry {
     name: string;
@@ -25,7 +25,12 @@ export const fileApi = {
         const form = new FormData();
         form.append("path", path);
         form.append("file", file);
-        return api.post(`/files/upload`, form, true); // true = form-data
+
+        return api.post(`/files/upload`, form, {
+            headers: {
+                "Content-Type": "multipart/form-data"
+            }
+        });
     },
 
     download(path: string) {

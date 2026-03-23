@@ -3,7 +3,7 @@ import { useSMS } from "./useSMS";
 import SMSList from "./SMSList";
 import ConversationList from "./ConversationList";
 import ConversationView from "./ConversationView";
-import SearchBar from "./SearchBar";
+import SearchBar from '../../components/common/SearchBar';
 import SendSMSModal from "./SendSMSModal";
 import { smsApi } from "@/services/smsApi";
 import { toast } from "sonner";
@@ -14,7 +14,9 @@ import SMSToolbar from "./SMSToolbar";
 export default function SMSPage({ deviceId }: { deviceId: string }) {
   const { list, reload, loading } = useSMS(deviceId);
   const [selected, setSelected] = useState<any>(null);
-  const [threads, messages, activeThread, loadMessages, setThreads] = useState<any[]>([]);
+  const [threads, setThreads] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [activeThread, setActiveThread] = useState<any | null>(null);
   const [currentThread, setCurrentThread] = useState<any[]>([]);
   const [sendModal, setSendModal] = useState(false);
 
@@ -33,6 +35,18 @@ export default function SMSPage({ deviceId }: { deviceId: string }) {
     const res = await smsApi.search(q);
     setCurrentThread(res.data);
   }
+
+    async function loadMessages(thread: any) {
+        try {
+            setActiveThread(thread);
+
+            const res = await smsApi.search(thread.address);
+
+            setMessages(res.data || []);
+        } catch (e) {
+            console.error("Failed to load messages", e);
+        }
+    }
 
   return (
     <div className="flex h-full">

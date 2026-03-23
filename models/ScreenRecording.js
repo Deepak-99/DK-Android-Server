@@ -1,230 +1,150 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-    const ScreenRecording = sequelize.define('ScreenRecording', {
-        id: {
-            type: DataTypes.INTEGER,
-            primaryKey: true,
-            autoIncrement: true
-        },
-        deviceId: {
-            type: DataTypes.STRING,
-            allowNull: false,
-            field: 'deviceId',
-            references: {
-                model: 'devices',
-                key: 'deviceId',
-                onDelete: 'CASCADE',
-                onUpdate: 'CASCADE'
-            },
-            comment: 'Reference to the device that owns this recording'
-        },
-        recordingId: {
-            type: DataTypes.STRING,
-            allowNull: false,
-            field: 'recordingId',
-            unique: true,
-            comment: 'Unique identifier for the recording session'
-        },
-        fileName: {
-            type: DataTypes.STRING(255),
-            allowNull: false,
-            field: 'fileName',
-            comment: 'Name of the recorded file'
-        },
-        filePath: {
-            type: DataTypes.STRING(1024),
-            allowNull: false,
-            field: 'filePath',
-            comment: 'Filesystem path where the recording is stored'
-        },
-        fileSize: {
-            type: DataTypes.BIGINT,
-            allowNull: true,
-            field: 'fileSize',
-            comment: 'Size of the recording file in bytes'
-        },
-        duration: {
-            type: DataTypes.INTEGER, // Duration in seconds
-            allowNull: true
-        },
-        resolution: {
-            type: DataTypes.STRING, // e.g., "1920x1080"
-            allowNull: true
-        },
-        frameRate: {
-            type: DataTypes.INTEGER,
-            allowNull: true,
-            field: 'frameRate',
-            defaultValue: 30,
-            comment: 'Frames per second of the recording'
-        },
-        bitRate: {
-            type: DataTypes.INTEGER,
-            allowNull: true,
-            field: 'bitRate',
-            comment: 'Bit rate of the recording in kbps'
-        },
-        format: {
-            type: DataTypes.STRING,
-            allowNull: true,
-            defaultValue: 'mp4'
-        },
-        quality: {
-            type: DataTypes.ENUM('low', 'medium', 'high', 'ultra'),
-            allowNull: true,
-            defaultValue: 'medium'
-        },
-        recordingType: {
-            type: DataTypes.ENUM('manual', 'scheduled', 'triggered'),
-            allowNull: false,
-            field: 'recordingType',
-            defaultValue: 'manual',
-            comment: 'How the recording was initiated'
-        },
-        status: {
-            type: DataTypes.ENUM('recording', 'completed', 'failed', 'processing'),
-            allowNull: false,
-            defaultValue: 'recording'
-        },
-        startTime: {
-            type: DataTypes.DATE,
-            allowNull: false,
-            field: 'startTime',
-            defaultValue: DataTypes.NOW,
-            comment: 'When the recording was started'
-        },
-        endTime: {
-            type: DataTypes.DATE,
-            allowNull: true,
-            field: 'endTime',
-            comment: 'When the recording was completed or stopped'
-        },
-        thumbnailPath: {
-            type: DataTypes.STRING(1024),
-            allowNull: true,
-            field: 'thumbnailPath',
-            comment: 'Path to the thumbnail image for the recording'
-        },
-        metadata: {
-            type: DataTypes.JSON,
-            allowNull: true,
-            comment: 'Additional recording metadata (app in focus, user activity, etc.)'
-        },
-        encryptionKey: {
-            type: DataTypes.STRING(512),
-            allowNull: true,
-            field: 'encryptionKey',
-            comment: 'Encryption key if recording is encrypted'
-        },
-        isEncrypted: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            field: 'isEncrypted',
-            defaultValue: false,
-            comment: 'Whether the recording is encrypted'
-        },
-        uploadStatus: {
-            field: 'uploadStatus',
-            type: DataTypes.ENUM('pending', 'uploading', 'completed', 'failed'),
-            allowNull: false,
-            defaultValue: 'pending'
-        },
-        upload_progress: {
-            type: DataTypes.INTEGER,
-            allowNull: true,
-            defaultValue: 0,
-            validate: {
-                min: 0,
-                max: 100
-            }
-        },
-        error_message: {
-            type: DataTypes.TEXT,
-            allowNull: true
-        },
-        tags: {
-            type: DataTypes.JSON,
-            allowNull: true,
-            comment: 'Tags for categorizing recordings'
-        },
-        isDeleted: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            field: 'isDeleted',
-            defaultValue: false,
-            comment: 'Soft delete flag'
-        },
-        createdBy: {
-            type: DataTypes.STRING(255),
-            allowNull: true,
-            field: 'createdBy',
-            comment: 'User or system that initiated the recording'
-        },
-        viewCount: {
-            type: DataTypes.INTEGER,
-            field: 'viewCount',
-            defaultValue: 0,
-            comment: 'Number of times the recording has been viewed'
-        },
-        deleted_at: {
-            type: DataTypes.DATE,
-            allowNull: true
-        }
-    }, {
-        tableName: 'screen_recordings',
-        underscored: false,
-        timestamps: true,
-        paranoid: true, // Soft delete
-        deletedAt: 'deleted_at',
-        // Disable automatic index creation to avoid 'Too many keys' error
-        indexes: []
-    });
 
-    // Class methods
-    ScreenRecording.getRecordingsByDevice = async function(deviceId, limit = 50, offset = 0) {
-        return await this.findAll({
-            where: { 
-                deviceId: deviceId,
-                isDeleted: false
-            },
-            order: [['start_time', 'DESC']],
-            limit,
-            offset
-        });
-    };
+  return sequelize.define('ScreenRecording', {
 
-    ScreenRecording.getActiveRecordings = async function() {
-        return await this.findAll({
-            where: { 
-                status: 'recording',
-                isDeleted: false
-            },
-            order: [['start_time', 'DESC']]
-        });
-    };
+      id: {
+          type: DataTypes.INTEGER,
+          primaryKey: true,
+          autoIncrement: true
+      },
 
-    ScreenRecording.getRecordingStats = async function(deviceId = null) {
-        const whereClause = { isDeleted: false };
-        if (deviceId) {
-            whereClause.deviceId = deviceId;
-        }
+      deviceId: {
+          type: DataTypes.STRING,
+          field: 'device_id',
+          allowNull: false
+      },
 
-        const totalRecordings = await this.count({ where: whereClause });
-        const activeRecordings = await this.count({ 
-            where: { ...whereClause, status: 'recording' } 
-        });
-        const completedRecordings = await this.count({ 
-            where: { ...whereClause, status: 'completed' } 
-        });
+      recordingId: {
+          type: DataTypes.STRING,
+          field: 'recording_id',
+          unique: true,
+          allowNull: false
+      },
 
-        return {
-            total: totalRecordings,
-            active: activeRecordings,
-            completed: completedRecordings,
-            failed: await this.count({ where: { ...whereClause, status: 'failed' } })
-        };
-    };
+      fileName: {
+          type: DataTypes.STRING,
+          field: 'file_name',
+          allowNull: false
+      },
 
-    return ScreenRecording;
+      filePath: {
+          type: DataTypes.STRING,
+          field: 'file_path',
+          allowNull: false
+      },
+
+      fileSize: {
+          type: DataTypes.BIGINT,
+          field: 'file_size'
+      },
+
+      duration: DataTypes.INTEGER,
+
+      resolution: DataTypes.STRING,
+
+      frameRate: {
+          type: DataTypes.INTEGER,
+          field: 'frame_rate',
+          defaultValue: 30
+      },
+
+      bitRate: {
+          type: DataTypes.INTEGER,
+          field: 'bit_rate'
+      },
+
+      format: {
+          type: DataTypes.STRING,
+          defaultValue: 'mp4'
+      },
+
+      quality: {
+          type: DataTypes.ENUM('low', 'medium', 'high', 'ultra'),
+          defaultValue: 'medium'
+      },
+
+      recordingType: {
+          type: DataTypes.ENUM('manual', 'scheduled', 'triggered'),
+          field: 'recording_type',
+          defaultValue: 'manual'
+      },
+
+      status: {
+          type: DataTypes.ENUM('recording', 'completed', 'failed', 'processing'),
+          defaultValue: 'recording'
+      },
+
+      startTime: {
+          type: DataTypes.DATE,
+          field: 'start_time',
+          defaultValue: DataTypes.NOW
+      },
+
+      endTime: {
+          type: DataTypes.DATE,
+          field: 'end_time'
+      },
+
+      thumbnailPath: {
+          type: DataTypes.STRING,
+          field: 'thumbnail_path'
+      },
+
+      metadata: DataTypes.JSON,
+
+      encryptionKey: {
+          type: DataTypes.STRING,
+          field: 'encryption_key'
+      },
+
+      isEncrypted: {
+          type: DataTypes.BOOLEAN,
+          field: 'is_encrypted',
+          defaultValue: false
+      },
+
+      uploadStatus: {
+          type: DataTypes.ENUM('pending', 'uploading', 'completed', 'failed'),
+          field: 'upload_status',
+          defaultValue: 'pending'
+      },
+
+      uploadProgress: {
+          type: DataTypes.INTEGER,
+          field: 'upload_progress',
+          defaultValue: 0
+      },
+
+      errorMessage: {
+          type: DataTypes.TEXT,
+          field: 'error_message'
+      },
+
+      tags: DataTypes.JSON,
+
+      isDeleted: {
+          type: DataTypes.BOOLEAN,
+          field: 'is_deleted',
+          defaultValue: false
+      },
+
+      createdBy: {
+          type: DataTypes.STRING,
+          field: 'created_by'
+      },
+
+      viewCount: {
+          type: DataTypes.INTEGER,
+          field: 'view_count',
+          defaultValue: 0
+      }
+
+  }, {
+      tableName: 'screen_recordings',
+      timestamps: true,
+      paranoid: true,
+      underscored: true
+  });
 };

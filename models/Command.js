@@ -1,18 +1,22 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
+
   const Command = sequelize.define('Command', {
+
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
+
     deviceId: {
       type: DataTypes.STRING,
       allowNull: false,
-      comment: 'References devices.deviceId (string unique device identifier)'
+      field: 'device_id'
     },
-    command_type: {
+
+    commandType: {
       type: DataTypes.ENUM(
         'unknown','login','custom',
         'push_tokens','push_data','start_repeat_push_data','stop_repeat_push_data','sync_app_config',
@@ -31,78 +35,86 @@ module.exports = (sequelize) => {
         'set_dynamic_config','push_dynamic_config',
         'location_request','take_photo','get_contacts','get_sms','send_sms','get_call_logs','get_device_info','lock_device','unlock_device','wipe_device','install_app','uninstall_app','get_installed_apps','show_message'
       ),
+      field: 'command_type',
       allowNull: false
     },
-    command_data: {
+
+    commandData: {
       type: DataTypes.JSON,
-      allowNull: true,
-      comment: 'Command parameters and data'
+      field: 'command_data'
     },
+
     status: {
       type: DataTypes.ENUM('pending','sent','acknowledged','completed','failed','expired'),
       defaultValue: 'pending'
     },
+
     priority: {
       type: DataTypes.ENUM('low','normal','high','urgent'),
       defaultValue: 'normal'
     },
-    created_by: {
+
+    createdBy: {
       type: DataTypes.UUID,
-      allowNull: true,
-      comment: 'User ID who created the command'
+      field: 'created_by'
     },
-    sent_at: {
+
+    sentAt: {
       type: DataTypes.DATE,
-      allowNull: true
+      field: 'sent_at'
     },
-    acknowledged_at: {
+
+    acknowledgedAt: {
       type: DataTypes.DATE,
-      allowNull: true
+      field: 'acknowledged_at'
     },
-    completed_at: {
+
+    completedAt: {
       type: DataTypes.DATE,
-      allowNull: true
+      field: 'completed_at'
     },
-    expires_at: {
+
+    expiresAt: {
       type: DataTypes.DATE,
-      allowNull: true
+      field: 'expires_at'
     },
-    response_data: {
+
+    responseData: {
       type: DataTypes.JSON,
-      allowNull: true
+      field: 'response_data'
     },
-    error_message: {
+
+    errorMessage: {
       type: DataTypes.TEXT,
-      allowNull: true
+      field: 'error_message'
     },
-    retry_count: {
+
+    retryCount: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      field: 'retry_count',
       defaultValue: 0
     },
-    max_retries: {
+
+    maxRetries: {
       type: DataTypes.INTEGER,
+      field: 'max_retries',
       defaultValue: 3
     },
-    metadata: {
-      type: DataTypes.JSON,
-      allowNull: true
-    }
+
+    metadata: DataTypes.JSON
+
   }, {
     tableName: 'commands',
     timestamps: true,
-    paranoid: true,         // keep deleted_at column
-    underscored: true,      // created_at, updated_at, deleted_at
+    paranoid: true,
+    underscored: true,
     indexes: [
-      { name: 'idx_commands_device_id', fields: ['deviceId'] },
-      { name: 'idx_commands_command_type', fields: ['command_type'] },
-      { name: 'idx_commands_status', fields: ['status'] },
-      { name: 'idx_commands_created_at', fields: ['created_at'] }
-    ],
-    // no afterSync hook required; we'll use a sync helper instead
+      { fields: ['device_id'] },
+      { fields: ['command_type'] },
+      { fields: ['status'] },
+      { fields: ['created_at'] }
+    ]
   });
-
-  // association is set from Device model (Device.hasMany(Command,...))
 
   return Command;
 };

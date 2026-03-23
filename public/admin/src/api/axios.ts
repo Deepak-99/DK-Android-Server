@@ -1,39 +1,45 @@
+//public/src/api/axios.ts
+
 import axios, {
   AxiosInstance,
-  InternalAxiosRequestConfig
+  InternalAxiosRequestConfig,
 } from "axios";
 
-import { disconnect } from "../services/websocket";
-import { getToken, setToken, clearToken } from "../utils/token";
+import { disconnect } from "@/services/websocket";
+import { getToken, setToken, clearToken } from "@/utils/token";
 
 /* ---------------------------------------------------
-   Create Axios Instance (TYPED)
+   Create Axios Instance
 --------------------------------------------------- */
 
 const api: AxiosInstance = axios.create({
-  baseURL: "",
+  baseURL: "http://localhost:3000/api",
   timeout: 30000,
   withCredentials: true // REQUIRED for refresh cookies
 });
 
-// Raw axios instance (no interceptors)
-const rawAxios = axios.create();
+// Separate instance (no interceptors)
+const rawAxios = axios.create({
+  baseURL: "http://localhost:3000/api",
+  withCredentials: true,
+});
 
-let isRefreshing = false;
-let pendingRequests: ((token: string) => void)[] = [];
+/* ---------------------------------------------------
+   Error Normalizer
+--------------------------------------------------- */
 
 export const normalizeApiError = (err: any) => {
   if (!err.response) {
     return {
       type: "network",
-      message: "Server unreachable. Please try again."
+      message: "Server unreachable. Please try again.",
     };
   }
 
   return {
     type: "api",
     status: err.response.status,
-    message: err.response.data?.message || "Request failed"
+    message: err.response.data?.error || "Request failed",
   };
 };
 
@@ -46,7 +52,8 @@ api.interceptors.request.use(
     const token = getToken();
 
     if (token) {
-      config.headers.set("Authorization", `Bearer ${token}`);
+      config.headers = config.headers || {};
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
 
     return config;
@@ -54,61 +61,67 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-
 /* ---------------------------------------------------
-   Response Interceptor (Refresh Token Logic)
+   Response Interceptor (Handle 401 + Refresh)
 --------------------------------------------------- */
 
+let isRefreshing = false;
+let pendingRequests: ((token: string) => void)[] = [];
+
 api.interceptors.response.use(
-  (res) => res,
-  async (err) => {
-    const originalRequest = err.config;
+  (response) => response,
+
+  async (error) => {
+    const originalRequest = error.config;
 
     if (
-      err.response?.status === 401 &&
+      error.response?.status === 401 &&
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
 
-      if (!isRefreshing) {
-        isRefreshing = true;
-
-        try {
-          const res = await rawAxios.post(
-            "/auth/refresh",
-            {},
-            { withCredentials: true }
-          );
-
-          setToken(res.data.token);
-
-          pendingRequests.forEach((cb) =>
-            cb(res.data.token)
-          );
-
-          pendingRequests = [];
-        } catch {
-          clearToken();
-          disconnect();
-          window.location.href = "/login";
-          return Promise.reject(err);
-        } finally {
-          isRefreshing = false;
-        }
+      // 🔥 If already refreshing → queue requests
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          pendingRequests.push((token: string) => {
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+            resolve(api(originalRequest));
+          });
+        });
       }
 
-      return new Promise((resolve) => {
-        pendingRequests.push((token: string) => {
-          originalRequest.headers.set(
-            "Authorization",
-            `Bearer ${token}`
-          );
-          resolve(api(originalRequest));
-        });
-      });
+      isRefreshing = true;
+
+      try {
+        // 🔥 Refresh token call
+        const res = await rawAxios.post("/auth/refresh");
+
+        const newToken = res.data.token;
+
+        setToken(newToken);
+
+        // Retry all pending requests
+        pendingRequests.forEach((cb) => cb(newToken));
+        pendingRequests = [];
+
+        // Retry original request
+        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+
+        return api(originalRequest);
+      } catch (refreshError) {
+        // 🔥 HARD LOGOUT
+        clearToken();
+        disconnect();
+
+        window.location.href = "/login";
+
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
     }
 
-    return Promise.reject(err);
+    return Promise.reject(error);
   }
 );
 

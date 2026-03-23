@@ -1,6 +1,21 @@
 const express = require('express');
-const { Op, sequelize } = require('sequelize');
-const { Device, Location, MediaFile, Contact, SMS, CallLog, Command } = require('../config/database');
+const { Op } = require('sequelize');
+const { sequelize } = require('../models');
+const db = require('../models');
+
+const {
+    Device,
+    Location,
+    MediaFile,
+    Contact,
+    SMS,
+    CallLog,
+    Command
+} = db;
+
+console.log("DASHBOARD MODELS:", Object.keys(db));
+console.log("Device model:", Device ? "✅ OK" : "❌ MISSING");
+
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
@@ -71,32 +86,35 @@ router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
     // Get recent activity
     const recentDevices = await Device.findAll({
       limit: 5,
-      order: [['lastSeen', 'DESC']],
-      attributes: [
-        'id', 
-        'deviceId', 
-        'name', 
-        'status', 
-        ['lastSeen', 'lastSeen'], 
-        ['battery_level', 'batteryLevel']
-      ],
+      order: [['last_seen', 'DESC']],
+        attributes: [
+            'id',
+            ['device_id', 'deviceId'],
+            'name',
+            'status',
+            ['last_seen', 'lastSeen'],
+            ['battery_level', 'batteryLevel']
+        ],
       where: {
         deleted_at: null
       },
       raw: true
     });
 
-    const recentLocations = await Location.findAll({
-      limit: 10,
-      order: [['timestamp', 'DESC']],
-      include: [
-        {
-          model: Device,
-          as: 'device',
-          attributes: [['deviceId', 'device_id'], 'name']
-        }
-      ]
-    });
+      const recentLocations = await Location.findAll({
+          limit: 10,
+          order: [['timestamp', 'DESC']],
+          include: [
+              {
+                  model: Device,
+                  as: 'device',
+                  attributes: [
+                      ['device_id', 'deviceId'],
+                      'name'
+                  ]
+              }
+          ]
+      });
 
     res.json({
       success: true,
@@ -179,17 +197,32 @@ router.get('/stats/data-usage', authenticateToken, requireAdmin, async (req, res
       group: ['media_type']
     });
 
-    const deviceStats = await Device.findAll({
-      attributes: [
-        'id',
-        'deviceId',
-        'name',
-        [sequelize.literal('(SELECT COUNT(*) FROM locations WHERE device_id = Device.deviceId)'), 'location_count'],
-        [sequelize.literal('(SELECT COUNT(*) FROM media_files WHERE device_id = Device.deviceId AND is_deleted = false)'), 'media_count'],
-        [sequelize.literal('(SELECT SUM(file_size) FROM media_files WHERE device_id = Device.deviceId AND is_deleted = false)'), 'media_size']
-      ],
-      order: [['name', 'ASC']]
-    });
+      const deviceStats = await Device.findAll({
+          attributes: [
+              'id',
+              ['device_id', 'deviceId'],
+              'name',
+              [
+                  sequelize.literal(
+                      '(SELECT COUNT(*) FROM device_locations WHERE device_id = Device.device_id)'
+                  ),
+                  'location_count'
+              ],
+              [
+                  sequelize.literal(
+                      '(SELECT COUNT(*) FROM media_files WHERE device_id = Device.device_id AND is_deleted = false)'
+                  ),
+                  'media_count'
+              ],
+              [
+                  sequelize.literal(
+                      '(SELECT SUM(file_size) FROM media_files WHERE device_id = Device.device_id AND is_deleted = false)'
+                  ),
+                  'media_size'
+              ]
+          ],
+          order: [['name', 'ASC']]
+      });
 
     res.json({
       success: true,
@@ -227,7 +260,10 @@ router.get('/stats/commands', authenticateToken, requireAdmin, async (req, res) 
         {
           model: Device,
           as: 'device',
-          attributes: [['deviceId', 'device_id'], 'name']
+            attributes: [
+                ['device_id', 'deviceId'],
+                'name'
+            ]
         }
       ]
     });

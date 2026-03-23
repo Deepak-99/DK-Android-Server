@@ -1,57 +1,52 @@
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const db = require('../models');
-const logger = require('../utils/logger');
+const bcrypt = require('bcryptjs'); // use bcryptjs
 
-const { User } = db;
+const logger = require('../utils/logger');
 
 /* ======================================================
    LOGIN
 ====================================================== */
 
 exports.login = async (req, res) => {
-
     try {
 
         const { email, password } = req.body;
 
         if (!email || !password) {
-
             return res.status(400).json({
                 success: false,
-                error: 'Email and password required'
+                message: 'Email and password required'
             });
-
         }
+
+        // ✅ FIXED
+        const { User } = global.db;
 
         const user = await User.findOne({
             where: { email }
         });
 
         if (!user) {
-
             return res.status(401).json({
                 success: false,
-                error: 'Invalid credentials'
+                message: 'Invalid credentials'
             });
-
         }
 
         const passwordValid = await bcrypt.compare(password, user.password);
 
         if (!passwordValid) {
-
             return res.status(401).json({
                 success: false,
-                error: 'Invalid credentials'
+                message: 'Invalid credentials'
             });
-
         }
 
         const token = jwt.sign(
             {
                 userId: user.id,
-                role: user.role
+                role: user.role,
+                tokenType: 'access'
             },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
@@ -76,9 +71,8 @@ exports.login = async (req, res) => {
 
         res.status(500).json({
             success: false,
-            error: 'Server error'
+            message: 'Server error'
         });
-
     }
 
 };
@@ -100,7 +94,7 @@ exports.me = async (req, res) => {
 
             return res.status(404).json({
                 success: false,
-                error: 'User not found'
+                message: 'User not found'
             });
 
         }
@@ -116,7 +110,7 @@ exports.me = async (req, res) => {
 
         res.status(500).json({
             success: false,
-            error: 'Server error'
+            message: 'Server error'
         });
 
     }
@@ -145,7 +139,7 @@ exports.logout = async (req, res) => {
 
         res.status(500).json({
             success: false,
-            error: 'Server error'
+            message: 'Server error'
         });
 
     }

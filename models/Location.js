@@ -1,125 +1,77 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
+
   const Location = sequelize.define('Location', {
+
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
+
     deviceId: {
       type: DataTypes.STRING,
       allowNull: false,
-      field: 'deviceId',
-      references: {
-        model: 'devices',
-        key: 'deviceId'
-      },
-      comment: 'Reference to devices table (deviceId)'
+      field: 'device_id'
     },
+
     latitude: {
       type: DataTypes.DECIMAL(10, 8),
       allowNull: false
     },
+
     longitude: {
       type: DataTypes.DECIMAL(11, 8),
       allowNull: false
     },
-    altitude: {
-      type: DataTypes.DECIMAL(8, 2),
-      allowNull: true
-    },
-    accuracy: {
-      type: DataTypes.DECIMAL(8, 2),
-      allowNull: true,
-      comment: 'GPS accuracy in meters'
-    },
-    speed: {
-      type: DataTypes.DECIMAL(8, 2),
-      allowNull: true,
-      comment: 'Speed in m/s'
-    },
-    bearing: {
-      type: DataTypes.DECIMAL(6, 2),
-      allowNull: true,
-      comment: 'Bearing in degrees'
-    },
-    provider: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      comment: 'GPS, NETWORK, PASSIVE, etc.'
-    },
-    address: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      comment: 'Reverse geocoded address'
-    },
+
+    altitude: DataTypes.DECIMAL(8, 2),
+
+    accuracy: DataTypes.DECIMAL(8, 2),
+
+    speed: DataTypes.DECIMAL(8, 2),
+
+    bearing: DataTypes.DECIMAL(6, 2),
+
+    provider: DataTypes.STRING,
+
+    address: DataTypes.TEXT,
+
     timestamp: {
       type: DataTypes.DATE,
-      allowNull: false,
       defaultValue: DataTypes.NOW
     },
-    battery_level: {
+
+    batteryLevel: {
       type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        min: 0,
-        max: 100
-      }
+      field: 'battery_level',
+      validate: { min: 0, max: 100 }
     },
-    network_type: {
+
+    networkType: {
       type: DataTypes.STRING,
-      allowNull: true
+      field: 'network_type'
     },
-    is_mock: {
+
+    isMock: {
       type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      comment: 'Whether location is from mock provider'
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+      field: 'is_mock',
+      defaultValue: false
     }
+
   }, {
-      tableName: 'device_locations',
-      timestamps: true,
-      paranoid: false,
-      underscored: false,
-      indexes: [
-          {
-              name: 'idx_location_device',
-              fields: ['deviceId']
-          },
-          {
-              name: 'idx_location_device_time',
-              fields: ['deviceId', 'timestamp']
-          },
-          {
-              name: 'idx_location_time',
-              fields: ['timestamp']
-          },
-          {
-              name: 'idx_location_provider',
-              fields: ['provider']
-          }
-      ],
-    hooks: {
-      beforeValidate: (location) => {
-        location.updated_at = new Date();
-        if (location.isNewRecord) {
-          location.created_at = new Date();
-        }
-      }
-    }
+    tableName: 'device_locations',
+    timestamps: true,
+    underscored: true,
+    indexes: [
+      { fields: ['device_id'] },
+      { fields: ['device_id', 'timestamp'] },
+      { fields: ['timestamp'] },
+      { fields: ['provider'] }
+    ]
   });
 
-  // Define associations
   Location.associate = (models) => {
     Location.belongsTo(models.Device, {
       foreignKey: 'deviceId',

@@ -1,7 +1,7 @@
-import { lazy, Suspense } from 'react';
+import {JSX, lazy, Suspense} from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { CircularProgress, Box } from '@mui/material';
-import Layout from '../components/common/Layout';
+import Layout from './components/layout/Layout';
 import { useAuth } from './contexts/AuthContext';
 
 // Lazy load components

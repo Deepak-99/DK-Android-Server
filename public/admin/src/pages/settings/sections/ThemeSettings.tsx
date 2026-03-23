@@ -25,7 +25,7 @@ import {
   Check as CheckIcon
 } from '@mui/icons-material';
 import { ChromePicker, ColorResult } from 'react-color';
-import { useTheme as useAppTheme } from '@/theme';
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 const colorPresets = [
   { name: 'Default', value: '#1976d2' },
@@ -94,7 +94,7 @@ const ThemeSettings: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="subtitle1" gutterBottom>
               Theme Mode
@@ -215,7 +215,7 @@ const ThemeSettings: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="subtitle1" gutterBottom>
               Layout

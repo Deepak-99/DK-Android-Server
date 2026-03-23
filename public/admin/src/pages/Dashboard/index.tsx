@@ -1,7 +1,7 @@
 import { Box, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 
-import { getDashboardStats } from "../../services/dashboard";
+import { getDashboardStats } from "@/services/dashboard";
 
 import LoadingSkeleton from "../../components/common/LoadingSkeleton";
 import StatCard from "../../components/dashboard/StatCard";
@@ -74,7 +74,7 @@ const Dashboard = () => {
       >
         <StatCard title="Devices" value={stats.devices} />
         <StatCard title="Online" value={stats.online} />
-        <StatCard title="Alerts" value={stats.alerts} />
+        <StatCard title="Offline" value={stats.alerts} />
         <StatCard title="Commands" value={stats.commands} />
       </Box>
 

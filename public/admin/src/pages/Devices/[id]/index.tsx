@@ -1,8 +1,10 @@
+//src/pages/[id]/index.tsx
+
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Box, Tabs, Tab, Paper, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { getDeviceById, Device } from "../../../services/devices";
+import { getDeviceById, Device } from "@/services/devices";
 
 import DeviceInfo from "./features/DeviceInfo";
 import CallRecordings from "./features/CallRecordings";

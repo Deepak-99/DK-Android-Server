@@ -1,73 +1,90 @@
 // models/index.js
-const fs = require("fs");
-const path = require("path");
-const { DataTypes, Sequelize } = require("sequelize");
 
-console.log("[MODELS] STEP 1: models/index.js loaded");
+const fs = require('fs');
+const path = require('path');
+const { DataTypes } = require('sequelize');
 
-module.exports = (sequelize) => {
+// 🔥 Load existing sequelize instance
+const sequelize = require('../config/database');
 
-  console.log("[MODELS] STEP 2: Loading models with sequelize");
+if (!sequelize) {
+  throw new Error('[MODELS] ❌ Sequelize instance not found. Check config/database.js');
+}
 
-  const db = {};
-  const basename = path.basename(__filename);
+const db = {};
+const basename = path.basename(__filename);
 
-  const files = fs.readdirSync(__dirname);
+// 🔥 Files to ignore
+const IGNORE_FILES = [
+  basename,
+  'db.js'
+];
 
-  console.log("[MODELS] STEP 3: Files detected:", files);
+// 🔥 Only load valid model files
+const modelFiles = fs.readdirSync(__dirname).filter((file) => {
+  return (
+    file.endsWith('.js') &&
+    !file.endsWith('.test.js') &&
+    !file.includes('.clean') &&   // ❌ ignore temp files
+    !IGNORE_FILES.includes(file)
+  );
+});
 
-  files
-      .filter(file => {
-          return (
-              file !== basename &&
-              file !== 'db.js' &&   // <-- important fix
-              file.endsWith('.js') &&
-              !file.endsWith('.test.js')
-          );
-      })
-    .forEach(file => {
+console.log(`[MODELS] 🔍 Found ${modelFiles.length} model files`);
 
-      console.log(`[MODELS] STEP 4: Loading model → ${file}`);
+modelFiles.forEach((file) => {
+  const filePath = path.join(__dirname, file);
 
-      const modelPath = path.join(__dirname, file);
+  try {
+    const modelFactory = require(filePath);
 
-      try {
-
-        const model = require(modelPath)(sequelize, DataTypes);
-
-        db[model.name] = model;
-
-        console.log(`[MODELS] STEP 5: Model loaded → ${model.name}`);
-
-      } catch (err) {
-
-        console.error(`[MODELS] ERROR loading ${file}`, err);
-
-      }
-
-    });
-
-  console.log("[MODELS] STEP 6: Running associations");
-
-  Object.keys(db).forEach(modelName => {
-
-    const model = db[modelName];
-
-    if (typeof model.associate === "function") {
-
-      console.log(`[MODELS] Associating ${modelName}`);
-
-      model.associate(db);
-
+    if (typeof modelFactory !== 'function') {
+      console.warn(`[MODELS] ⚠️ Skipping ${file} (not a function export)`);
+      return;
     }
 
-  });
+    const model = modelFactory(sequelize, DataTypes);
 
-  db.sequelize = sequelize;
-  db.Sequelize = Sequelize;
+    if (!model || !model.name) {
+      throw new Error(`Invalid model export in ${file}`);
+    }
 
-  console.log(`[MODELS] STEP 7: ${Object.keys(db).length - 2} models ready`);
+    if (db[model.name]) {
+      throw new Error(`Duplicate model name detected: ${model.name}`);
+    }
 
-  return db;
+    db[model.name] = model;
 
-};
+    console.log(`[MODELS] ✅ Loaded → ${model.name}`);
+
+  } catch (err) {
+    console.error(`[MODELS] ❌ Failed to load ${file}`);
+    console.error(err);
+    process.exit(1); // 🔥 HARD FAIL (production safe)
+  }
+});
+
+console.log('[MODELS] 🔗 Running associations');
+
+Object.keys(db).forEach((modelName) => {
+  if (typeof db[modelName].associate === 'function') {
+    try {
+      db[modelName].associate(db);
+      console.log(`[MODELS] 🔗 Associated → ${modelName}`);
+    } catch (err) {
+      console.error(`[MODELS] ❌ Association failed for ${modelName}`);
+      console.error(err);
+      process.exit(1);
+    }
+  }
+});
+
+// 🔥 Attach sequelize
+db.sequelize = sequelize;
+
+// Optional: expose Sequelize class if needed
+db.Sequelize = require('sequelize');
+
+console.log(`[MODELS] 🚀 ${Object.keys(db).length - 2} models initialized`);
+
+module.exports = db;
