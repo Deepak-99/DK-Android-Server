@@ -1,27 +1,45 @@
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { useEffect, useRef } from "react";
+import { subscribe } from "@/services/websocket";
 
+interface Props {
+  lat: number;
+  lng: number;
+}
 
-export default function LiveMap({ latest }: { latest: any }) {
-    if (!latest) return null;
+export default function LiveMap({ lat, lng }: Props) {
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
 
-    const position: [number, number] = [latest.latitude, latest.longitude];
+  useEffect(() => {
+    const L = (window as any).L;
 
-    return (
-        <div className="h-[350px] rounded-xl overflow-hidden bg-card border border-border">
-            <MapContainer center={position} zoom={15} className="h-full w-full">
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    mapRef.current = L.map("liveMap").setView([lat, lng], 14);
 
-                <Marker position={position}>
-                    <Popup>
-                        <div>
-                            <strong>Current Location</strong>
-                            <br />
-                            Accuracy: {latest.accuracy}m <br />
-                            Speed: {latest.speed} km/h
-                        </div>
-                    </Popup>
-                </Marker>
-            </MapContainer>
-        </div>
-    );
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    ).addTo(mapRef.current);
+
+    markerRef.current = L.marker([lat, lng]).addTo(mapRef.current);
+
+    const unsubscribe = subscribe((event: any) => {
+      if (event.type === "location_update") {
+        const { latitude, longitude } = event.payload;
+
+        markerRef.current.setLatLng([latitude, longitude]);
+        mapRef.current.panTo([latitude, longitude]);
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+      mapRef.current?.remove();
+    };
+  }, []);
+
+  return (
+    <div
+      id="liveMap"
+      className="h-[400px] w-full rounded-xl border border-border"
+    />
+  );
 }

@@ -1,46 +1,85 @@
-import { Device } from "../../services/devicesApi";
-import * as Icons from "lucide-react";
-import { Link } from "react-router-dom";
+import {
+  Smartphone,
+  Battery,
+  Wifi,
+  WifiOff,
+  Zap
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-export default function DeviceCard({
-    device
-}: {
-    device: Device & { live: string };
-}) {
-    return (
-        <Link
-            to={`/devices/${device.id}`}
-            className="p-5 rounded-xl bg-card border border-border hover:border-accent transition shadow-sm"
+interface Props {
+  device: any;
+}
+
+export default function DeviceCard({ device }: Props) {
+  const navigate = useNavigate();
+
+  const online = device.live === "online";
+
+  return (
+    <div
+      onClick={() => navigate(`/devices/${device.id}`)}
+      className={`rounded-xl p-4 cursor-pointer transition
+        bg-card border
+        ${online
+          ? "border-success shadow-[0_0_12px_rgba(34,197,94,0.15)]"
+          : "border-border hover:border-accent"
+        }`}
+    >
+      {/* Header */}
+      <div className="flex justify-between items-start">
+
+        <div>
+          <div className="flex items-center gap-2">
+            <Smartphone size={18} />
+
+            <span className="font-medium">
+              {device.nickname || device.name}
+            </span>
+
+            {online && (
+              <Zap size={14} className="text-success animate-pulse"/>
+            )}
+          </div>
+
+          <div className="text-sm text-muted mt-1">
+            {device.model}
+          </div>
+        </div>
+
+        <div
+          className={`px-2 py-1 text-xs rounded-md
+          ${online
+            ? "bg-success/20 text-success"
+            : "bg-danger/20 text-danger"}`}
         >
-            <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-3">
-                    <Icons.Phone className="w-7 h-7 text-accent" />
-                    <div>
-                        <div className="font-semibold text-text">
-                            {device.nickname || device.name}
-                        </div>
-                        <div className="text-sm text-text-dim">
-                            {device.manufacturer} {device.model}
-                        </div>
-                    </div>
-                </div>
+          {online ? "Online" : "Offline"}
+        </div>
 
-                <div
-                    className={`w-3 h-3 rounded-full ${
-                        device.live === "online"
-                            ? "bg-green-500"
-                            : "bg-red-500"
-                    }`}
-                />
-            </div>
+      </div>
 
-            <div className="mt-4 text-xs text-text-dim">
-                Android {device.android_version} • App {device.app_version}
-            </div>
+      {/* Status Row */}
+      <div className="flex items-center justify-between mt-4 text-sm text-muted">
 
-            <div className="mt-1 text-xs text-text-dim">
-                Last Seen: {new Date(device.lastSeen).toLocaleString()}
-            </div>
-        </Link>
-    );
+        <div className="flex items-center gap-2">
+          {online ? <Wifi size={14}/> : <WifiOff size={14}/>}
+          {online ? "Connected" : "Disconnected"}
+        </div>
+
+        {device.batteryLevel !== null && device.batteryLevel !== undefined && (
+          <div className="flex items-center gap-1">
+            <Battery size={14}/>
+            {device.batteryLevel}%
+          </div>
+        )}
+
+      </div>
+
+      {/* Footer */}
+      <div className="text-xs text-muted mt-3">
+        Last seen: {new Date(device.lastSeen).toLocaleString()}
+      </div>
+
+    </div>
+  );
 }

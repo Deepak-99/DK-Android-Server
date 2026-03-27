@@ -1,4 +1,4 @@
-// In routes/api/v1/index.js
+// In routes/index.js
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');

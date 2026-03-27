@@ -1,27 +1,27 @@
-import { Outlet } from 'react-router-dom';
-import { Box } from '@mui/material';
-import Navbar from './Navbar';
-import Sidebar from './Sidebar';
+import { Outlet } from "react-router-dom";
+import Sidebar from "./Sidebar";
+import Navbar from "./Navbar";
 
-const Layout = () => {
-    return (
-        <Box sx={{ display: 'flex' }}>
-            <Navbar />
-            <Sidebar />
-            <Box
-                component="main"
-                sx={{
-                    flexGrow: 1,
-                    p: 3,
-                    mt: 8, // Adjust based on your navbar height
-                    minHeight: '100vh',
-                    backgroundColor: 'background.default'
-                }}
-            >
-                <Outlet />
-            </Box>
-        </Box>
-    );
-};
+export default function Layout() {
+  return (
+    <div className="flex h-screen bg-bg text-text overflow-hidden">
 
-export default Layout;
+      {/* Sidebar */}
+      <Sidebar />
+
+      {/* Right side */}
+      <div className="flex-1 flex flex-col">
+
+        {/* Navbar */}
+        <Navbar />
+
+        {/* Content */}
+        <main className="flex-1 overflow-auto p-6">
+          <Outlet />
+        </main>
+
+      </div>
+
+    </div>
+  );
+}

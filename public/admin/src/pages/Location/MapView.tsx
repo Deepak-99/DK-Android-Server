@@ -1,75 +1,42 @@
-import { useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
-import type { LatLngExpression } from "leaflet";
-import HeatMapLayer from "./HeatMapLayer";
+import {useEffect, useMemo, useRef, useState} from "react";
 import "leaflet/dist/leaflet.css";
 
-interface LocationPoint {
-  latitude: number;
-  longitude: number;
+interface Props {
+  lat: number;
+  lng: number;
 }
 
-interface MapViewProps {
-  points: LocationPoint[];
-  live?: LocationPoint | null;
-}
+export default function MapView({ lat, lng }: Props) {
+  const mapRef = useRef<HTMLDivElement | null>(null);
 
-export default function MapView({ points, live }: MapViewProps) {
+  useEffect(() => {
+    if (!mapRef.current) return;
 
-  const [mode, setMode] = useState<"path" | "heat">("path");
+    const L = (window as any).L;
 
-  const path: LatLngExpression[] = useMemo(
-    () => points.map(p => [p.latitude, p.longitude]),
-    [points]
-  );
+    const map = L.map(mapRef.current, {
+      zoomControl: false,
+      attributionControl: false,
+    }).setView([lat, lng], 13);
 
-  const center: LatLngExpression =
-    live
-      ? [live.latitude, live.longitude]
-      : path[0] ?? [0, 0];
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 19,
+      }
+    ).addTo(map);
+
+    L.marker([lat, lng]).addTo(map);
+
+    return () => {
+      map.remove();
+    };
+  }, [lat, lng]);
 
   return (
-    <div className="h-full w-full relative">
-
-      {/* Toggle Button */}
-      <div className="absolute z-[1000] top-2 right-2 bg-white p-2 rounded shadow">
-        <button
-          className="text-sm"
-          onClick={() =>
-            setMode(prev => (prev === "path" ? "heat" : "path"))
-          }
-        >
-          {mode === "path" ? "Show Heatmap" : "Show Path"}
-        </button>
-      </div>
-
-      <MapContainer
-        center={center}
-        zoom={15}
-        className="h-full w-full"
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {/* Heat Mode */}
-        {mode === "heat" && points.length > 0 && (
-          <HeatMapLayer points={points} />
-        )}
-
-        {/* Path Mode */}
-        {mode === "path" && path.length > 1 && (
-          <Polyline
-            positions={path}
-            pathOptions={{ color: "lime", weight: 4 }}
-          />
-        )}
-
-        {/* Live Marker */}
-        {live && (
-          <Marker position={[live.latitude, live.longitude]} />
-        )}
-      </MapContainer>
-    </div>
+    <div
+      ref={mapRef}
+      className="w-full h-[400px] rounded-xl border border-border"
+    />
   );
 }

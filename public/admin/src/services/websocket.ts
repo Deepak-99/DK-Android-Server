@@ -1,141 +1,52 @@
-type WSStatus =
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "disconnected";
+type Listener = (event: any) => void;
 
-export let socket: WebSocket | null = null;
+let socket: WebSocket | null = null;
+const listeners: Listener[] = [];
 
-let reconnectAttempts = 0;
-let reconnectTimer: number | null = null;
-
-const listeners = new Set<(data: any) => void>();
-const statusListeners = new Set<(s: WSStatus) => void>();
-
-const MAX_DELAY = 30000;
-
-/* -------------------------
-   Build WS URL safely
-------------------------- */
-const getWSUrl = (): string | null => {
-  const token = localStorage.getItem("token");
-  if (!token) return null;
-
-  const protocol = location.protocol === "https:" ? "wss" : "ws";
-
-  return `${protocol}://localhost:3000/ws/command?token=${token}`;
-};
-
-const notify = (s: WSStatus) => {
-  statusListeners.forEach((cb) => cb(s));
-};
-
-/* -------------------------
-   CONNECT
-------------------------- */
 export function connect() {
-  if (
-    socket &&
-    (socket.readyState === WebSocket.OPEN ||
-      socket.readyState === WebSocket.CONNECTING)
-  ) {
-    return;
-  }
+  if (socket) return;
 
-  const url = getWSUrl();
-  if (!url) {
-    console.warn("WS skipped — no token yet");
-    return;
-  }
-
-  notify("connecting");
-
-  socket = new WebSocket(url);
+  socket = new WebSocket("ws://localhost:3000");
 
   socket.onopen = () => {
-    reconnectAttempts = 0;
-    notify("connected");
+    console.log("WS connected");
   };
 
-  socket.onmessage = (e) => {
+  socket.onmessage = (msg) => {
     try {
-      const data = JSON.parse(e.data);
-      listeners.forEach((cb) => cb(data));
-    } catch (err) {
-      console.warn("WS parse error", err);
+      const data = JSON.parse(msg.data);
+      listeners.forEach((l) => l(data));
+    } catch (e) {
+      console.error("WS parse error", e);
     }
   };
 
   socket.onclose = () => {
-    notify("disconnected");
-    scheduleReconnect();
-  };
-
-  socket.onerror = () => {
-    socket?.close();
+    console.warn("WS disconnected");
+    socket = null;
+    setTimeout(connect, 3000);
   };
 }
 
-/* -------------------------
-   RECONNECT
-------------------------- */
-function scheduleReconnect() {
-  if (reconnectTimer) return;
-
-  const delay = Math.min(1000 * 2 ** reconnectAttempts++, MAX_DELAY);
-
-  notify("reconnecting");
-
-  reconnectTimer = window.setTimeout(() => {
-    reconnectTimer = null;
-    connect();
-  }, delay);
-}
-
-/* -------------------------
-   DISCONNECT
-------------------------- */
 export function disconnect() {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-  }
-
-  reconnectTimer = null;
-
   socket?.close();
   socket = null;
 }
 
-/* -------------------------
-   EMIT
-------------------------- */
-export function wsEmit(type: string, payload?: any) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+export function subscribe(listener: Listener) {
+  listeners.push(listener);
 
-  socket.send(JSON.stringify({ type, payload }));
+  return () => {
+    const index = listeners.indexOf(listener);
+    if (index !== -1) listeners.splice(index, 1);
+  };
 }
 
-/* -------------------------
-   SUBSCRIBE
-------------------------- */
-export function subscribe(cb: (data: any) => void) {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
+/* alias for compatibility */
+export function wsEmit(event: any) {
+  socket?.send(JSON.stringify(event));
 }
 
-export function subscribeStatus(cb: (s: WSStatus) => void) {
-  statusListeners.add(cb);
-  return () => statusListeners.delete(cb);
-}
-
-export function onStatusChange(cb: (s: WSStatus) => void) {
-  return subscribeStatus(cb);
-}
-
-export function onEvent(type: string, cb: (data: any) => void) {
-  return subscribe((data) => {
-    if (data?.type === type) {
-      cb(data.payload ?? data);
-    }
-  });
+export function send(event: any) {
+  wsEmit(event);
 }

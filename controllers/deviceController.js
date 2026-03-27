@@ -140,7 +140,10 @@ exports.getAllDevices = async (req, res) => {
 exports.getDevice = async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const device = await Device.findByPk(deviceId);
+
+        const device = await Device.findOne({
+            where: { deviceId }   // ← FIX HERE
+        });
 
         if (!device) {
             return res.status(404).json({
@@ -149,20 +152,13 @@ exports.getDevice = async (req, res) => {
             });
         }
 
-        // Check if user has permission to access this device
-        if (req.user.role !== 'admin' && req.user.deviceId !== deviceId) {
-            return res.status(403).json({
-                success: false,
-                error: 'Not authorized to access this device'
-            });
-        }
-
         return res.json({
             success: true,
             data: device
         });
+
     } catch (error) {
-        logger.error('Error fetching device:', error);
+        console.error(error);
         return res.status(500).json({
             success: false,
             error: 'Failed to fetch device'

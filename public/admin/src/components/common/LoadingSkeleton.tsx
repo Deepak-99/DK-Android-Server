@@ -74,4 +74,14 @@ const LoadingSkeleton = ({
   );
 };
 
+export const CardSkeleton = () => {
+    return (
+        <div className="animate-pulse bg-card border border-border rounded-xl p-4">
+            <div className="h-4 bg-border rounded w-1/3 mb-3"/>
+            <div className="h-3 bg-border rounded w-full mb-2"/>
+            <div className="h-3 bg-border rounded w-2/3"/>
+        </div>
+    );
+};
+
 export default LoadingSkeleton;

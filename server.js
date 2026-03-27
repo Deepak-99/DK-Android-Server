@@ -78,6 +78,8 @@ const rbacRouter = require('./routes/rbac');
 
 console.log("[BOOT] STEP 11: Routes loaded");
 
+const healthRouter = require('./routes/health');
+
 /* =========================
    EXPRESS SETUP
 ========================= */
@@ -153,6 +155,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/devices', devicesRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/rbac', rbacRouter);
+app.use('/api/health', healthRouter);
 
 /* ✅ TEST ROUTE (IMPORTANT FOR BROWSER) */
 app.get('/', (req, res) => {

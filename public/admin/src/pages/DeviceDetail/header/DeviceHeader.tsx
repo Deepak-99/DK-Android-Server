@@ -1,34 +1,85 @@
-import { useDeviceDetail } from "../useDeviceDetail";
-import * as Icons from "lucide-react";
+import {
+  Smartphone,
+  Battery,
+  Cpu,
+  Signal
+} from "lucide-react";
 
-export default function DeviceHeader({ deviceId }: { deviceId: string }) {
-    const { info, loading } = useDeviceDetail(deviceId);
+interface Props {
+  device: any;
+}
 
-    if (loading || !info) return <div>Loading…</div>;
+export default function DeviceHeader({ device }: Props) {
 
-    return (
-        <div className="p-5 rounded-xl bg-card border border-border shadow-sm">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-xl font-semibold">{info.nickname || info.name}</h2>
-                    <div className="text-text-dim text-sm">
-                        {info.manufacturer} {info.model} — Android {info.android_version}
-                    </div>
-                </div>
+  const online = device?.isOnline;
 
-                <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2 text-text-dim">
-                        <Icons.Battery className="w-5 h-5" />
-                        <span>{info.battery}%</span>
-                    </div>
+  const quality = device?.signalStrength ?? 0;
 
-                    <div
-                        className={`w-3 h-3 rounded-full ${
-                            info.isOnline ? "bg-green-500" : "bg-red-500"
-                        }`}
-                    ></div>
-                </div>
+  return (
+    <div className="bg-card border border-border rounded-xl p-5">
+
+      <div className="flex justify-between items-center flex-wrap gap-4">
+
+        {/* Left */}
+        <div className="flex items-center gap-3">
+          <Smartphone className="text-accent"/>
+
+          <div>
+            <div className="text-lg font-semibold">
+              {device?.name}
             </div>
+
+            <div className="text-sm text-muted">
+              {device?.model} • Android {device?.osVersion}
+            </div>
+          </div>
         </div>
-    );
+
+        {/* Right */}
+        <div className="flex items-center gap-5 text-sm">
+
+          {/* Manufacturer */}
+          <div className="flex items-center gap-1">
+            <Cpu size={14}/>
+            {device?.manufacturer || "Unknown"}
+          </div>
+
+          {/* Battery */}
+          <div className="flex items-center gap-1">
+            <Battery size={14}/>
+            {device?.batteryLevel ?? "--"}%
+          </div>
+
+          {/* Signal Quality */}
+          <div className="flex items-center gap-1">
+            <Signal size={14}/>
+            <div className="flex gap-[2px]">
+              {[1,2,3,4].map(i => (
+                <div
+                  key={i}
+                  className={`w-1 rounded-sm
+                    ${quality >= i ? "bg-success" : "bg-border"}
+                  `}
+                  style={{ height: i * 4 }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Status */}
+          <div
+            className={`px-2 py-1 rounded-md text-xs
+              ${online
+                ? "bg-success/20 text-success"
+                : "bg-danger/20 text-danger"
+              }`}
+          >
+            {online ? "Online" : "Offline"}
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  );
 }

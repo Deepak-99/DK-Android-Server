@@ -1,71 +1,83 @@
-import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Box, Tabs, Tab } from "@mui/material";
+import { useState } from "react";
 
-import DashboardLayout from "../../layouts/DashboardLayout";
+import { useDeviceDetail } from "./useDeviceDetail";
 import DeviceHeader from "./header/DeviceHeader";
 
-// Existing feature pages
 import InfoTab from "./tabs/InfoTab";
 import LocationTab from "./tabs/LocationTab/LocationTab";
-import FileExplorer from "../devices/[id]/features/FileExplorer";
+
 import Commands from "../devices/[id]/features/Commands";
+import Contacts from "../devices/[id]/features/Contacts";
 import SMS from "../devices/[id]/features/SMS";
-import { Contacts } from "@mui/icons-material";
-import InstalledApps from "../devices/[id]/features/InstalledApps";
 import CallLogs from "../devices/[id]/features/CallLogs";
+import InstalledApps from "../devices/[id]/features/InstalledApps";
+import FileExplorer from "../devices/[id]/features/FileExplorer";
+import ScreenProjections from "../devices/[id]/features/ScreenProjections";
+
+const tabs = [
+  "info",
+  "location",
+  "commands",
+  "contacts",
+  "sms",
+  "calls",
+  "apps",
+  "files",
+  "screen"
+];
 
 export default function DeviceDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState(0);
 
-  if (!id) return null;
+  const { id } = useParams();
+
+  const { info, loading } = useDeviceDetail(id!);
+
+  const [active,setActive] = useState("info");
+
+  if (loading || !info) return null;
 
   return (
-    <DashboardLayout>
-      <DeviceHeader deviceId={id} />
+    <div className="space-y-4">
 
-      {/* Tabs Header */}
-      <Box sx={{ borderBottom: 1, borderColor: "divider", mt: 2 }}>
-        <Tabs
-          value={tab}
-          onChange={(_, v) => setTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-        >
-          <Tab label="Info" />
-          <Tab label="Location" />
-          <Tab label="Files" />
-          <Tab label="Commands" />
-          <Tab label="SMS" />
-          <Tab label="Contacts" />
-          <Tab label="Apps" />
-          <Tab label="Logs" />
-        </Tabs>
-      </Box>
+      <DeviceHeader device={info} />
 
-      {/* Tab Content */}
-        <Box sx={{ mt: 2 }}>
+      {/* Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {tabs.map(t => (
+          <button
+            key={t}
+            onClick={() => setActive(t)}
+            className={`px-3 py-1 rounded-lg text-sm
+            ${active===t
+              ? "bg-accent text-white"
+              : "bg-card border border-border"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
-            {tab === 0 && <InfoTab deviceId={id} />}
+      {/* Tabs Content */}
+        {active==="info" && <InfoTab deviceId={info} />}
 
-            {tab === 1 && <LocationTab deviceId={id} />}
+        {active==="location" && <LocationTab deviceId={info} />}
 
-            {tab === 2 && <FileExplorer />}
+        {active==="commands" && <Commands deviceId={id!} />}
 
-            {tab === 3 && <Commands />}
+        {active==="contacts" && <Contacts />}
 
-            {tab === 4 && <SMS />}
+        {active==="sms" && <SMS />}
 
-            {tab === 5 && <Contacts />}
+        {active==="calls" && <CallLogs />}
 
-            {tab === 6 && <InstalledApps />}
+        {active==="apps" && <InstalledApps />}
 
-            {tab === 7 && <CallLogs />}
+        {active==="files" && <FileExplorer />}
 
-        </Box>
+        {active==="screen" && <ScreenProjections deviceId={id!} />}
 
-
-    </DashboardLayout>
+    </div>
   );
 }

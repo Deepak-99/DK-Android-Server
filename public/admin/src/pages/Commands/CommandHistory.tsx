@@ -1,23 +1,28 @@
-import { CommandDTO } from "../../types/commands";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/services/api";
 
-export default function CommandHistory({ history }: { history: CommandDTO[] }) {
-    return (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-            {history.map((cmd) => (
-                <div key={cmd.id} className="px-4 py-3 border-b border-border">
-                    <div className="flex justify-between">
-                        <div>
-                            <div className="font-semibold">{cmd.command_type}</div>
-                            {cmd.result && (
-                                <div className="text-muted-foreground text-sm mt-1">
-                                    {cmd.result}
-                                </div>
-                            )}
-                        </div>
-                        <div className="text-sm capitalize">{cmd.status}</div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
+export default function CommandHistory({ deviceId }: any) {
+  const { data } = useQuery({
+    queryKey:["commands",deviceId],
+    queryFn:()=>api.get(`/commands?deviceId=${deviceId}`)
+  });
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <h3 className="font-semibold mb-3">
+        Command History
+      </h3>
+
+      <div className="space-y-2">
+        {data?.data?.map((c:any)=>(
+          <div
+            key={c.id}
+            className="border-b border-border pb-2 text-sm"
+          >
+            {c.command} — {c.status}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

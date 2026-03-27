@@ -1,23 +1,20 @@
-import api from "@/services/api";
-import { ContactItem } from "@/pages/Contacts/types";
+import api from "./api";
+import { unwrap } from "@/utils/api";
 
 export const contactsApi = {
-  list(deviceId: string) {
-    return api.get<ContactItem[]>(`/contacts/device/${deviceId}`);
+
+  async list(deviceId: string) {
+    const res = await api.get(`/contacts/${deviceId}`);
+    return unwrap(res);
   },
 
-  search(query: string) {
-    return api.get<ContactItem[]>(`/contacts/search/${query}`);
+  async get(id: string) {
+    const res = await api.get(`/contacts/detail/${id}`);
+    return unwrap(res);
   },
 
-  add(deviceId: string, data: any) {
-    return api.post("/contacts", {
-      device_id: deviceId,
-      contacts: [data]
-    });
-  },
-
-  delete(contactId: string) {
-    return api.delete(`/contacts/${contactId}`);
+  async delete(id: string) {
+    return api.delete(`/contacts/${id}`);
   }
+
 };

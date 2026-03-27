@@ -1,20 +1,19 @@
 import api from "./api";
-import { CommandItem } from "../pages/Commands/types";
+import { unwrap } from "@/utils/api";
 
 export const commandsApi = {
-    list(deviceId: string) {
-        return api.get<CommandItem[]>(`/commands?device_id=${deviceId}`);
-    },
 
-    create(deviceId: string, command_type: string, parameters: any = {}) {
-        return api.post<CommandItem>("/commands", {
-            device_id: deviceId,
-            command_type,
-            parameters
-        });
-    },
+  async send(deviceId: string, command: string) {
+    const res = await api.post("/commands", {
+      deviceId,
+      command
+    });
 
-    updateStatus(id: number, status: string, result?: any) {
-        return api.patch(`/commands/${id}/status`, { status, result });
-    }
+    return unwrap(res);
+  },
+
+  async history(deviceId: string) {
+    const res = await api.get(`/commands?deviceId=${deviceId}`);
+    return unwrap(res);
+  }
 };

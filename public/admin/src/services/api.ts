@@ -1,45 +1,43 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import axios from "axios";
+import { getToken, clearToken } from "@/utils/token";
 
-const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+const api = axios.create({
+  baseURL: "http://localhost:3000/api",
+  timeout: 30000
 });
 
 /* -----------------------------
    REQUEST INTERCEPTOR
 ----------------------------- */
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
+api.interceptors.request.use((config) => {
+  const token = getToken();   // ✅ FIXED (was localStorage.getItem)
 
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
 
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  return config;
+});
 
 /* -----------------------------
    RESPONSE INTERCEPTOR
-   (NO refresh token logic)
 ----------------------------- */
 api.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      console.warn("Unauthorized — redirecting to login");
+    (res) => res,
+    (error) => {
 
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+        if (error.response?.status === 401) {
+
+            // prevent redirect loop
+            if (window.location.pathname !== "/login") {
+                clearToken();
+                window.location.replace("/login");
+            }
+        }
+
+        return Promise.reject(error);
     }
-
-    return Promise.reject(error);
-  }
 );
 
 export default api;

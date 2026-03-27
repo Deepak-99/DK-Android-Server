@@ -1,18 +1,25 @@
 import { create } from "zustand";
 
-interface WSDeviceState {
-    liveStatus: Record<string, "online" | "offline">;
-    updateStatus: (deviceId: string, status: string) => void;
+interface Store {
+  liveStatus: Record<string,string>;
+  metrics: Record<string,any>;
+  updateStatus: (id:string,status:string)=>void;
+  updateMetrics: (id:string,data:any)=>void;
 }
 
-export const useWSDeviceStore = create<WSDeviceState>((set) => ({
-    liveStatus: {},
+export const useWSDeviceStore = create<Store>((set)=>({
 
-    updateStatus: (deviceId, status) =>
-        set((state) => ({
-            liveStatus: {
-                ...state.liveStatus,
-                [deviceId]: status === "online" ? "online" : "offline",
-            },
-        })),
+  liveStatus:{},
+  metrics:{},
+
+  updateStatus:(id,status)=>
+    set((s)=>({
+      liveStatus:{...s.liveStatus,[id]:status}
+    })),
+
+  updateMetrics:(id,data)=>
+    set((s)=>({
+      metrics:{...s.metrics,[id]:data}
+    }))
+
 }));

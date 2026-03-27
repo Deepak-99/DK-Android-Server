@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { connect } from "@/services/websocket";
 
 import App from './App';
 import './index.css';

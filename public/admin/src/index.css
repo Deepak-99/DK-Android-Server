@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+html, body, #root {
+    height: 100%;
+}
+
 body {
-    @apply bg-bg text-text;
+    @apply bg-bg text-text font-sans;
+    margin: 0;
+}
+
+/* Grafana-style scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0b0f14;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1f2933;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #374151;
+}
+
+@keyframes fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade {
+    animation: fade 0.25s ease;
 }

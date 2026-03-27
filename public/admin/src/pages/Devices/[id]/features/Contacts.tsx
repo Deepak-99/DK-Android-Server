@@ -31,7 +31,7 @@ import {
   updateContact,
   deleteContact,
   Contact
-} from '../../../../services/contacts';
+} from '@/services/contacts';
 
 /* ---------------- TYPES ---------------- */
 

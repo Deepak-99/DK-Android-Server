@@ -1,12 +1,16 @@
 import api from "./api";
-import { CallLog } from "@/pages/CallLogs/types";
+import { unwrap } from "@/utils/api";
 
 export const callLogsApi = {
-    list(deviceId: string, limit = 100) {
-        return api.get<CallLog[]>(`/calls/device/${deviceId}?limit=${limit}`);
-    },
 
-    stats(deviceId: string) {
-        return api.get(`/calls/stats/device/${deviceId}`);
-    }
+  async list(deviceId: string) {
+    const res = await api.get(`/callLogs/${deviceId}`);
+    return unwrap(res);
+  },
+
+  async detail(id: string) {
+    const res = await api.get(`/callLogs/detail/${id}`);
+    return unwrap(res);
+  }
+
 };

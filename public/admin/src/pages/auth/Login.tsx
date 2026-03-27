@@ -13,7 +13,6 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { setToken } from "@/utils/token";
-import { connect } from "@/services/websocket";
 import { loginApi } from "@/api/auth";
 
 
@@ -33,51 +32,59 @@ const Login: React.FC = () => {
       password: Yup.string().required("Required"),
     }),
 
-    onSubmit: async (values, { setSubmitting }) => {
-      try {
-        setError("");
+      onSubmit: async (values, { setSubmitting }) => {
+          try {
+              setError("");
 
-        const res = await loginApi(values.email, values.password);
+              const res = await loginApi(values.email, values.password);
 
-        // ✅ store token
-          localStorage.setItem("token", res.token);
+              // store token (correct way)
+              setToken(res.token);
+              localStorage.setItem("user", JSON.stringify(res.user)); // IMPORTANT
+              login(res.user);
 
-        // ✅ update context (IMPORTANT FIX)
-        login(res.user);
-
-        // ✅ connect websocket
-        connect();
-
-        // ❗ navigation handled inside AuthContext
-        // navigate("/"); ← optional (you can keep or remove)
-
-      } catch (err: any) {
-        setError(err?.response?.data?.message || "Login failed");
-      } finally {
-        setSubmitting(false);
-      }
-    },
+          } catch (err: any) {
+              setError(err?.response?.data?.message || "Login failed");
+          } finally {
+              setSubmitting(false);
+          }
+      },
   });
 
 
 
-  return (
-    <Container component="main" maxWidth="xs">
-      <Paper elevation={3} sx={{ p: 4, mt: 8 }}>
-        <Box display="flex" flexDirection="column" alignItems="center">
-          <Typography variant="h5">Sign in</Typography>
+    return (
+        <Box
+            sx={{
+                minHeight: "100vh",
+                backgroundColor: "#0b0f14",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+            }}
+        >
+            <Paper
+                elevation={0}
+                sx={{
+                    backgroundColor: "#11161c",
+                    border: "1px solid #1f2933",
+                    padding: 4,
+                    width: 400
+                }}
+            >
+                <Typography variant="h5">Sign in</Typography>
 
-          {error && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {error}
-            </Typography>
-          )}
+                {error && (
+                    <Typography color="error" sx={{ mt: 2 }}>
+                        {error}
+                    </Typography>
+                )}
 
-          <Box
-            component="form"
-            onSubmit={formik.handleSubmit}
-            sx={{ mt: 1, width: "100%" }}
-          >
+                <Box
+                    component="form"
+                    onSubmit={formik.handleSubmit}
+                    sx={{ mt: 2 }}
+                >
             <TextField
               fullWidth
               margin="normal"
@@ -116,9 +123,9 @@ const Login: React.FC = () => {
               {formik.isSubmitting ? "Signing in..." : "Sign In"}
             </Button>
           </Box>
+         </Paper>
         </Box>
-      </Paper>
-    </Container>
+
   );
 };
 

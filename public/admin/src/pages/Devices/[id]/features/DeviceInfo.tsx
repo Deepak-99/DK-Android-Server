@@ -1,394 +1,305 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState } from "react";
+import { useParams } from "react-router-dom";
+
 import {
   Box,
   Typography,
-  Paper,
   Card,
   CardContent,
   Divider,
   Chip,
   CircularProgress,
   Button,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Tabs,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow
-} from '@mui/material';
+  Grid
+} from "@mui/material";
 
-import {
-  Refresh,
-  PhoneAndroid,
-  Storage,
-  Memory,
-  Speed,
-  Security,
-  Build,
-  DisplaySettings
-} from '@mui/icons-material';
+import RefreshIcon from "@mui/icons-material/Refresh";
+import BatteryFullIcon from "@mui/icons-material/BatteryFull";
+import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 
-import { useSnackbar } from 'notistack';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from "@tanstack/react-query";
+import { getDeviceInfo } from "@/services/deviceSettings";
 
-import {
-  getDeviceInfo,
-  DeviceInfo as DeviceInfoType
-} from '../../../../services/deviceSettings';
+/* ================= TYPE ================= */
 
-const DeviceInfo = () => {
-  const { id: deviceId } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState(0);
+type DeviceInfo = {
+  deviceId: string;
+  name?: string;
+  nickname?: string;
+  model?: string;
+  manufacturer?: string;
+  os?: string;
+  osVersion?: string;
+  isOnline?: boolean;
+  batteryLevel?: number | null;
+  isCharging?: boolean;
+  networkType?: string | null;
+  lastSeen?: string | null;
+  ipAddress?: string | null;
+  macAddress?: string | null;
+  appVersion?: string | null;
+};
 
-  const { enqueueSnackbar } = useSnackbar();
+/* ================= COMPONENT ================= */
 
-  /* ---------------- REACT QUERY V5 ---------------- */
+export default function DeviceInfo() {
+  const { id } = useParams();
+  const [tab, setTab] = useState(0);
 
-  const {
-    data: device,
-    isLoading,
-    isError,
-    refetch
-  } = useQuery<DeviceInfoType>({
-    queryKey: ['deviceInfo', deviceId],
-
-    queryFn: () => getDeviceInfo(deviceId!),
-
-    enabled: !!deviceId,
-
-    refetchOnWindowFocus: false
+  const { data, isLoading, refetch } = useQuery<DeviceInfo>({
+    queryKey: ["device-info", id],
+    queryFn: () => getDeviceInfo(id!),
+    enabled: !!id
   });
 
-  /* ---------------- HANDLERS ---------------- */
-
-  const refreshData = async () => {
-    try {
-      await refetch();
-      enqueueSnackbar('Device information refreshed', {
-        variant: 'success'
-      });
-    } catch {
-      enqueueSnackbar('Failed to refresh device information', {
-        variant: 'error'
-      });
-    }
-  };
-
-  const handleTabChange = (_: React.SyntheticEvent, value: number) => {
-    setActiveTab(value);
-  };
-
-  /* ---------------- LOADING / ERROR ---------------- */
+  const device = data;
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" p={4}>
+      <Box p={4} textAlign="center">
         <CircularProgress />
       </Box>
     );
   }
 
-  if (isError || !device) {
-    return (
-      <Box textAlign="center" p={4}>
-        <Typography color="error">
-          Failed to load device information
-        </Typography>
-
-        <Button
-          sx={{ mt: 2 }}
-          variant="outlined"
-          onClick={refreshData}
-          startIcon={<Refresh />}
-        >
-          Retry
-        </Button>
-      </Box>
-    );
-  }
-
-  /* ---------------- STATUS CHIP ---------------- */
-
-  const renderStatusChip = (status: string) => {
-    const map: Record<string, any> = {
-      online: { color: 'success', label: 'Online' },
-      offline: { color: 'error', label: 'Offline' },
-      busy: { color: 'warning', label: 'Busy' }
-    };
-
-    const item = map[status?.toLowerCase()] || {
-      color: 'default',
-      label: status
-    };
-
-    return <Chip size="small" label={item.label} color={item.color} />;
-  };
-
-  /* ---------------- UI ---------------- */
+  if (!device) return null;
 
   return (
     <Box>
 
-      {/* HEADER */}
+      {/* ================= HEADER ================= */}
 
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
-      >
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            gap={2}
+          >
+
+            <Box>
+              <Typography variant="h6">
+                {device.name || "Unknown Device"}
+              </Typography>
+
+              <Typography variant="body2" color="text.secondary">
+                {device.manufacturer} • {device.model}
+              </Typography>
+            </Box>
+
+            <Box display="flex" gap={2} alignItems="center">
+
+              <Chip
+                label={device.isOnline ? "Online" : "Offline"}
+                color={device.isOnline ? "success" : "error"}
+                size="small"
+              />
+
+              <Chip
+                icon={<BatteryFullIcon />}
+                label={`${device.batteryLevel ?? "--"}%`}
+                variant="outlined"
+              />
+
+              <Chip
+                icon={<NetworkCheckIcon />}
+                label={device.networkType || "Unknown"}
+                variant="outlined"
+              />
+
+            </Box>
+
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Grid container spacing={2}>
+
+            <Grid size={{ xs: 6, md: 3 }}>
+              <Info label="Android" value={device.osVersion} />
+            </Grid>
+
+            <Grid size={{ xs: 6, md: 3 }}>
+              <Info label="App Version" value={device.appVersion} />
+            </Grid>
+
+            <Grid size={{ xs: 6, md: 3 }}>
+              <Info label="IP Address" value={device.ipAddress} />
+            </Grid>
+
+            <Grid size={{ xs: 6, md: 3 }}>
+              <Info
+                label="Last Seen"
+                value={
+                  device.lastSeen
+                    ? new Date(device.lastSeen).toLocaleString()
+                    : "--"
+                }
+              />
+            </Grid>
+
+          </Grid>
+
+        </CardContent>
+      </Card>
+
+      {/* ================= HEADER BAR ================= */}
+
+      <Box display="flex" justifyContent="space-between" mb={2}>
         <Typography variant="h5">
           Device Information
         </Typography>
 
         <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={refreshData}
+          startIcon={<RefreshIcon />}
+          onClick={() => refetch()}
         >
           Refresh
         </Button>
       </Box>
 
-      {/* TABS */}
-
-      <Tabs
-        value={activeTab}
-        onChange={handleTabChange}
-        sx={{ mb: 3 }}
-      >
+      <Tabs value={tab} onChange={(_, v) => setTab(v)}>
         <Tab label="Overview" />
         <Tab label="Hardware" />
       </Tabs>
 
-      {/* ================= OVERVIEW TAB ================= */}
+      {/* ================= OVERVIEW ================= */}
 
-      {activeTab === 0 && (
+      {tab === 0 && (
+        <Grid container spacing={2} mt={1}>
 
-        <Box
-          display="grid"
-          gridTemplateColumns={{ xs: '1fr', md: '1fr 1fr' }}
-          gap={3}
-        >
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
 
-          {/* STATUS CARD */}
+                <Typography variant="h6">
+                  Device Status
+                </Typography>
 
-          <Card>
-            <CardContent>
+                <Divider sx={{ my: 2 }} />
 
-              <Typography variant="h6" gutterBottom>
-                Device Status
-              </Typography>
+                <Info label="Name" value={device.name} />
+                <Info label="Model" value={device.model} />
+                <Info label="Manufacturer" value={device.manufacturer} />
+                <Info label="OS" value={device.os} />
+                <Info label="OS Version" value={device.osVersion} />
 
-              <Divider sx={{ mb: 2 }} />
+              </CardContent>
+            </Card>
+          </Grid>
 
-              <List>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
 
-                <ListItem>
-                  <ListItemIcon>
-                    <PhoneAndroid />
-                  </ListItemIcon>
+                <Typography variant="h6">
+                  System Info
+                </Typography>
 
-                  <ListItemText
-                    primary="Device Name"
-                    secondary={device.name}
-                  />
-                </ListItem>
+                <Divider sx={{ my: 2 }} />
 
-                <ListItem>
-                  <ListItemIcon>
-                    <Build />
-                  </ListItemIcon>
+                <Info
+                  label="Battery"
+                  value={`${device.batteryLevel ?? "--"}%`}
+                />
 
-                  <ListItemText
-                    primary="Status"
-                    secondary={renderStatusChip('online')}
-                  />
-                </ListItem>
+                <Info
+                  label="Charging"
+                  value={device.isCharging ? "Yes" : "No"}
+                />
 
-                <ListItem>
-                  <ListItemIcon>
-                    <Speed />
-                  </ListItemIcon>
+                <Info
+                  label="Network"
+                  value={device.networkType}
+                />
 
-                  <ListItemText
-                    primary="Android Version"
-                    secondary={device.androidVersion}
-                  />
-                </ListItem>
+                <Info
+                  label="Last Seen"
+                  value={
+                    device.lastSeen
+                      ? new Date(device.lastSeen).toLocaleString()
+                      : "--"
+                  }
+                />
 
-                <ListItem>
-                  <ListItemIcon>
-                    <Security />
-                  </ListItemIcon>
+              </CardContent>
+            </Card>
+          </Grid>
 
-                  <ListItemText
-                    primary="Security Patch"
-                    secondary={device.securityPatch}
-                  />
-                </ListItem>
-
-              </List>
-
-            </CardContent>
-          </Card>
-
-          {/* SYSTEM CARD */}
-
-          <Card>
-            <CardContent>
-
-              <Typography variant="h6" gutterBottom>
-                System Info
-              </Typography>
-
-              <Divider sx={{ mb: 2 }} />
-
-              <Box
-                display="grid"
-                gridTemplateColumns="1fr 1fr"
-                gap={2}
-              >
-
-                <Box>
-                  <Typography variant="subtitle2">Manufacturer</Typography>
-                  <Typography variant="body2">
-                    {device.manufacturer}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="subtitle2">Model</Typography>
-                  <Typography variant="body2">
-                    {device.model}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="subtitle2">API Level</Typography>
-                  <Typography variant="body2">
-                    {device.apiLevel}
-                  </Typography>
-                </Box>
-
-                <Box>
-                  <Typography variant="subtitle2">Build</Typography>
-                  <Typography variant="body2">
-                    {device.buildNumber}
-                  </Typography>
-                </Box>
-
-              </Box>
-
-            </CardContent>
-          </Card>
-
-        </Box>
+        </Grid>
       )}
 
-      {/* ================= HARDWARE TAB ================= */}
+      {/* ================= HARDWARE ================= */}
 
-      {activeTab === 1 && (
+      {tab === 1 && (
+        <Grid container spacing={2} mt={1}>
 
-        <Card>
-          <CardContent>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
 
-            <Typography variant="h6" gutterBottom>
-              Hardware Information
-            </Typography>
-
-            <Divider sx={{ mb: 3 }} />
-
-            <Box
-              display="grid"
-              gridTemplateColumns={{ xs: '1fr', md: '1fr 1fr' }}
-              gap={3}
-            >
-
-              {/* MEMORY */}
-
-              <Box>
-
-                <Typography variant="subtitle1" gutterBottom>
-                  <Memory sx={{ mr: 1 }} />
-                  Memory
+                <Typography variant="h6">
+                  Network
                 </Typography>
 
-                <TableContainer component={Paper} variant="outlined">
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Total</TableCell>
-                        <TableCell>Available</TableCell>
-                      </TableRow>
-                    </TableHead>
+                <Divider sx={{ my: 2 }} />
 
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>
-                          {(device.memory.total / 1e9).toFixed(2)} GB
-                        </TableCell>
-                        <TableCell>
-                          {(device.memory.available / 1e9).toFixed(2)} GB
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
+                <Info label="Type" value={device.networkType} />
+                <Info label="IP" value={device.ipAddress} />
+                <Info label="MAC" value={device.macAddress} />
 
-                  </Table>
-                </TableContainer>
+              </CardContent>
+            </Card>
+          </Grid>
 
-              </Box>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <CardContent>
 
-              {/* STORAGE */}
-
-              <Box>
-
-                <Typography variant="subtitle1" gutterBottom>
-                  <Storage sx={{ mr: 1 }} />
-                  Storage
+                <Typography variant="h6">
+                  Battery
                 </Typography>
 
-                <TableContainer component={Paper} variant="outlined">
-                  <Table size="small">
+                <Divider sx={{ my: 2 }} />
 
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Total</TableCell>
-                        <TableCell>Used</TableCell>
-                      </TableRow>
-                    </TableHead>
+                <Info
+                  label="Level"
+                  value={`${device.batteryLevel ?? "--"}%`}
+                />
 
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>
-                          {(device.storage.internal.total / 1e9).toFixed(2)} GB
-                        </TableCell>
-                        <TableCell>
-                          {(device.storage.internal.used / 1e9).toFixed(2)} GB
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
+                <Info
+                  label="Charging"
+                  value={device.isCharging ? "Yes" : "No"}
+                />
 
-                  </Table>
-                </TableContainer>
+              </CardContent>
+            </Card>
+          </Grid>
 
-              </Box>
-
-            </Box>
-
-          </CardContent>
-        </Card>
+        </Grid>
       )}
 
     </Box>
   );
-};
+}
 
-export default DeviceInfo;
+/* ================= HELPER ================= */
+
+function Info({ label, value }: any) {
+  return (
+    <Box mb={1}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+
+      <Typography variant="body2">
+        {value || "--"}
+      </Typography>
+    </Box>
+  );
+}

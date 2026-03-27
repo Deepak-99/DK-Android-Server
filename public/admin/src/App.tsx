@@ -17,6 +17,7 @@ import theme from "./theme";
 
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { connect, disconnect } from "./services/websocket";
+import AlertsListener from "./components/alerts/AlertsListener";
 
 /* --------------------
    Lazy pages
@@ -58,13 +59,13 @@ const queryClient = new QueryClient({
 -------------------- */
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+    const { isAuthenticated } = useAuth();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace />;
+    }
 
-  return <>{children}</>;
+    return <>{children}</>;
 }
 
 /* --------------------
@@ -116,6 +117,8 @@ function App() {
 
               {/* ✅ WebSocket connects AFTER auth */}
               <WebSocketManager />
+
+              <AlertsListener />
 
               <Routes>
                 {/* Public */}

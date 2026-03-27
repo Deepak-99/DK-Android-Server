@@ -1,41 +1,28 @@
 import api from "./api";
+import { unwrap } from "@/utils/api";
 
-export interface FileEntry {
-    name: string;
-    path: string;
-    size: number;
-    type: "file" | "dir";
-    modified: number;
-}
+export const fileExplorerApi = {
 
-export const fileApi = {
-    list(path: string) {
-        return api.get<FileEntry[]>(`/files/ls?path=${encodeURIComponent(path)}`);
-    },
+  async list(deviceId: string, path = "/") {
+    const res = await api.get(`/fileExplorer/${deviceId}`, {
+      params: { path }
+    });
+    return unwrap(res);
+  },
 
-    mkdir(path: string, name: string) {
-        return api.post(`/files/mkdir`, { path, name });
-    },
+  async download(deviceId: string, file: string) {
+    return api.get(`/files/download`, {
+      params: { deviceId, file },
+      responseType: "blob"
+    });
+  },
 
-    delete(path: string) {
-        return api.delete(`/files?path=${encodeURIComponent(path)}`);
-    },
+  async upload(deviceId: string, file: File, path = "/") {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("path", path);
 
-    upload(path: string, file: File) {
-        const form = new FormData();
-        form.append("path", path);
-        form.append("file", file);
+    return api.post(`/files/upload/${deviceId}`, form);
+  }
 
-        return api.post(`/files/upload`, form, {
-            headers: {
-                "Content-Type": "multipart/form-data"
-            }
-        });
-    },
-
-    download(path: string) {
-        return api.get(`/files/download?path=${encodeURIComponent(path)}`, {
-            responseType: "blob",
-        });
-    }
 };

@@ -1,71 +1,54 @@
-import { useEffect, useState } from "react";
-import { devicesApi, Device } from "@/services/devicesApi";
+import { useEffect, useState, useCallback } from "react";
+import { devicesApi } from "@/services/devicesApi";
 import { useWSDeviceStore } from "@/store/wsDeviceStore";
 import { subscribe } from "@/services/websocket";
 
 export function useDevices() {
-    const [loading, setLoading] = useState(true);
-    const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    const liveStatus = useWSDeviceStore(
-        (state: { liveStatus: any }) => state.liveStatus
-    );
+  const liveStatus = useWSDeviceStore(s => s.liveStatus);
+  const updateStatus = useWSDeviceStore(s => s.updateStatus);
 
-    const updateStatus = useWSDeviceStore(
-        (state: { updateStatus: any }) => state.updateStatus
-    );
+  const loadDevices = useCallback(async () => {
+    try {
+      setLoading(true);
 
-    /* ================================
-       Initial Load
-    ================================= */
+      const res = await devicesApi.list();
 
-    useEffect(() => {
-        async function load() {
-            try {
-                setLoading(true);
-                const res = await devicesApi.list();
-                setDevices(res.data || []); // FIXED
-            } catch (err) {
-                console.error("Failed to load devices", err);
-                setDevices([]);
-            } finally {
-                setLoading(false);
-            }
-        }
+      // IMPORTANT FIX
+      const list = res?.data || res?.devices || res || [];
 
-        void load();
-    }, []);
+      setDevices(Array.isArray(list) ? list : []);
 
-    /* ================================
-       WebSocket Live Updates
-    ================================= */
+    } catch (e) {
+      console.error("Device load failed", e);
+      setDevices([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    useEffect(() => {
-        const unsubscribe = subscribe((event) => {
-            if (event.type === "device_status") {
-                const payload = event.payload as {
-                    deviceId: string;
-                    status: string;
-                };
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
 
-                updateStatus(payload.deviceId, payload.status);
-            }
-        });
+  useEffect(() => {
+    const unsub = subscribe((event) => {
+      if (event?.type === "device_status") {
+        updateStatus(event.payload.deviceId, event.payload.status);
+      }
+    });
 
-        return () => {
-            unsubscribe();
-        };
-    }, [updateStatus]);
+    return () => unsub?.();
+  }, []);
 
-    /* ================================
-       Return enriched devices
-    ================================= */
-
-    return {
-        loading,
-        devices: (devices || []).map((d) => ({
-            ...d,
-            live: liveStatus[d.deviceId] ?? d.status,
-        })),
-    };
+  return {
+    loading,
+    refresh: loadDevices,
+    devices: devices.map(d => ({
+      ...d,
+      status: liveStatus[d.deviceId] || d.status
+    }))
+  };
 }
